@@ -161,15 +161,22 @@ LIDAR_DETECTION_CLASS_MAP = {class_name: i for i, class_name in enumerate(lidar_
 
 
 ### Action Map ###
-# maps discrete action id to (speed, heading)
+# maps discrete action id to (speed, heading, vertical_speed)
 ACTION_MAP = []
 for spd in [1.0, 0.5]:
-    for hdg in range(180, -180, -45):
-        ACTION_MAP.append([spd, hdg])
-# add a none action
-ACTION_MAP.append([0.0, 0.0])
+    for hdg in range(180, -181, -45):  # Changed to include -180
+        # Add 0 vertical speed for all horizontal movements
+        ACTION_MAP.append([spd, hdg, 0.0])
 
-# ACTION MAP:
+# Vertical Movement 
+ACTION_MAP.append([0.5, 0.0, 0.5])  # Up slow
+ACTION_MAP.append([0.5, 0.0, -0.5])  # Down slow
+ACTION_MAP.append([1.0, 0.0, 1.0])  # Up fast
+ACTION_MAP.append([1.0, 0.0, -1.0])  # Down fast
+# add a none action
+ACTION_MAP.append([0.0, 0.0, 0.0])
+
+# ACTION MAP: (Need Update to include up and)
 # [[1.0,  180], [1.0,  135], [1.0,  90], 
 #  [1.0,   45], [1.0,    0], [1.0, -45], 
 #  [1.0,  -90], [1.0, -135], [0.5, 180], 
