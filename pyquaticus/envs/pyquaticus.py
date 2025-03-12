@@ -876,7 +876,9 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         self.set_geom_config(config_dict)
 
         # Setup action and observation spaces
-        self.action_map = [[spd, hdg] for (spd, hdg) in ACTION_MAP]
+        #self.action_map = [[spd, hdg] for (spd, hdg) in ACTION_MAP]
+        self.action_map = [[spd, hdg, vspd] for (spd, hdg, vspd) in ACTION_MAP]
+        
         self.action_spaces = {agent_id: self.get_agent_action_space() for agent_id in self.players}
 
         self.agent_obs_normalizer, self.global_state_normalizer = self._register_state_elements(team_size, len(self.obstacles))
