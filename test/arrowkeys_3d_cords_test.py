@@ -109,6 +109,13 @@ class KeyTest:
         while True:
             action_dict = self.process_event(self.quittable)
             self.obs, rewards, terminated, truncated, info = self.env.step(action_dict)
+            
+            blue_agent = self.env.agents_of_team[Team.BLUE_TEAM][0]
+            red_agent = self.env.agents_of_team[Team.RED_TEAM][0]
+            print(red_agent.pos)
+            # print(f"Blue Agent: X={blue_agent.pos[0]:.2f}, Y={blue_agent.pos[1]:.2f}, Z={blue_agent.pos[2]:.2f}")
+            # print(f"Red Agent: X={red_agent.pos[0]:.2f}, Y={red_agent.pos[1]:.2f}, Z={red_agent.pos[2]:.2f}")
+            
             for k in terminated:
                 if terminated[k] == True or truncated[k]==True:
                     time.sleep(1.)

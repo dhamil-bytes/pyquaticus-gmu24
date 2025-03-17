@@ -195,7 +195,10 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                 except:
                     default_action = False
                 if default_action:
-                    speed, heading = self._discrete_action_to_speed_relheading(
+                    #speed, heading = self._discrete_action_to_speed_relheading(
+                    #    action_dict[player.id]
+                    #)
+                    speed, heading, vspd = self._discrete_action_to_speed_relheading(
                         action_dict[player.id]
                     )
                     # Scale speed to agent's max speed
