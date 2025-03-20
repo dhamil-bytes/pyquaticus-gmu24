@@ -35,7 +35,7 @@ class Player:
     ----------
         id: The ID of the agent (also used as an index)
         team: The team of the agent (red or blue)
-        pos: The position of the agent [x, y]
+        pos: The position of the agent [x, y, z]
         speed: The speed of the agent (m / s)
         heading: The heading of the agent (deg), maritime convention: north is 0, east is 90
         prev_pos: The previous position of the agent
@@ -49,10 +49,10 @@ class Player:
 
     id: Hashable
     team: Team
-    pos: list[float] = field(init=False, default_factory=list)
+    pos: list[float] = field(init=False, default_factory=lambda: [0.0, 0.0, 0.0])
     speed: float = field(init=False, default_factory=float)
     heading: float = field(init=False, default_factory=float)
-    prev_pos: list[float] = field(init=False, default_factory=list)
+    prev_pos: list[float] = field(init=False, default_factory=lambda: [0.0, 0.0, 0.0])
     has_flag: bool = field(init=False, default=False)
     on_own_side: bool = field(init=False, default=True)
     tagging_cooldown: float = field(init=False)
@@ -70,7 +70,7 @@ class RenderingPlayer(Player):
         #### inherited from Player
         id: The ID of the agent (also used as an index)
         team: The team of the agent (red or blue)
-        pos: The position of the agent [x, y]
+        pos: The position of the agent [x, y, z]
         speed: The speed of the agent (m / s)
         heading: The heading of the agent (deg), maritime convention: north is 0, east is 90
         prev_pos: The previous position of the agent

@@ -47,7 +47,7 @@ class Dynamics(RenderingPlayer):
 
         raise NotImplementedError
 
-    def _move_agent(self, desired_speed: float, heading_error: float):
+    def _move_agent(self, desired_speed: float, heading_error: float, vertical_speed: float = 0.0):
         """
         Needs to update (at a minimum)
 
@@ -515,6 +515,7 @@ class Drone(Dynamics):
             "yaw_rate": 0,
             "x_vel": 0,
             "y_vel": 0,
+            "z_vel": 0
         }
         self.state.update(addl_state)
 
@@ -533,6 +534,7 @@ class Drone(Dynamics):
             "yaw_rate": 0,
             "x_vel": 0,
             "y_vel": 0,
+            "z_vel": 0
         }
         self.state.update(new_state)
 
@@ -560,13 +562,14 @@ class Drone(Dynamics):
             "yaw_rate": 0,
             "x_vel": 0,
             "y_vel": 0,
+            "z_vel": 0
         }
         self.state.update(new_state)
 
     def get_max_speed(self) -> float:
         return self.max_speed
 
-    def _move_agent(self, desired_speed: float, heading_error: float):
+    def _move_agent(self, desired_speed: float, heading_error: float, vertical_speed: float = 0.0):
         """
         Use quadcopter dynamics to move the agent given a desired speed and heading error.
         Adapted from https://github.com/AtsushiSakai/PythonRobotics?tab=readme-ov-file#drone-3d-trajectory-following
@@ -618,7 +621,7 @@ class Drone(Dynamics):
         des_z_vel = 0
         des_z_acc = 0
         z_pos = 0
-        z_vel = 0
+        z_vel = self.state["z_vel"]
 
         # Calculate vertical thrust and roll, pitch, and yaw torques.
         thrust = m * (
@@ -666,6 +669,7 @@ class Drone(Dynamics):
         self.state["x_vel"] = cur_x_vel + x_acc * self.dt
         self.state["y_vel"] = cur_y_vel + y_acc * self.dt
         z_vel += z_acc * self.dt
+        self.state["z_vel"] = z_vel
         z_pos += z_vel * self.dt
 
         avg_x_vel = (cur_x_vel + self.state["x_vel"]) / 2.0
@@ -676,7 +680,7 @@ class Drone(Dynamics):
 
         x_pos = self.pos[0] + avg_x_vel * self.dt
         y_pos = self.pos[1] + avg_y_vel * self.dt
-
+        
         self.prev_pos = self.pos
         self.pos = np.asarray([x_pos, y_pos])
         self.speed = np.sqrt(np.power(cur_x_vel, 2) + np.power(cur_y_vel, 2))
