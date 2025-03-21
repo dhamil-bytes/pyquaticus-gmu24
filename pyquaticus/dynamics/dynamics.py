@@ -25,7 +25,6 @@ class Dynamics(RenderingPlayer):
         self.state = {}
 
     def get_max_speed(self) -> float:
-
         raise NotImplementedError
 
     def reset(self):
@@ -33,7 +32,6 @@ class Dynamics(RenderingPlayer):
         Set all time-varying state/control values to their default initialization values.
         Do not change pos, speed, heading, is_tagged, has_flag, or on_own_side.
         """
-
         raise NotImplementedError
 
     def rotate(self, theta=180):
@@ -44,7 +42,6 @@ class Dynamics(RenderingPlayer):
         Place agent at previous position.
         Do not change is_tagged, has_flag, or on_own_side.
         """
-
         raise NotImplementedError
 
     def _move_agent(self, desired_speed: float, heading_error: float, vertical_speed: float = 0.0):
@@ -60,8 +57,8 @@ class Dynamics(RenderingPlayer):
 
         - desired_speed (m/s)
         - heading_error (deg)
+        - vertical_speed (m/s) - optional parameter for z-axis movement
         """
-
         raise NotImplementedError
 
 
@@ -501,10 +498,18 @@ class Heron(Dynamics):
 
 class Drone(Dynamics):
 
-    def __init__(self, max_speed: float = 10, **kwargs):
+    def __init__(
+        self, 
+        max_speed: float = 10,
+        max_vertical_speed: float = 2.0,  # Maximum vertical speed in m/s
+        max_vertical_accel: float = 1.0,  # Maximum vertical acceleration in m/s^2
+        **kwargs
+    ):
         super().__init__(**kwargs)
 
         self.max_speed = max_speed
+        self.max_vertical_speed = max_vertical_speed
+        self.max_vertical_accel = max_vertical_accel
 
         addl_state = {
             "pitch": 0,
@@ -515,7 +520,9 @@ class Drone(Dynamics):
             "yaw_rate": 0,
             "x_vel": 0,
             "y_vel": 0,
-            "z_vel": 0
+            "z_vel": 0,
+            "z_pos": 0,  # Current z position
+            "target_z": 0  # Target z position for altitude control
         }
         self.state.update(addl_state)
 
@@ -524,7 +531,6 @@ class Drone(Dynamics):
         Set all time-varying state/control values to their default initialization values.
         Do not change pos, speed, heading, is_tagged, has_flag, or on_own_side.
         """
-
         new_state = {
             "pitch": 0,
             "roll": 0,
@@ -534,7 +540,9 @@ class Drone(Dynamics):
             "yaw_rate": 0,
             "x_vel": 0,
             "y_vel": 0,
-            "z_vel": 0
+            "z_vel": 0,
+            "z_pos": 0,
+            "target_z": 0
         }
         self.state.update(new_state)
 
@@ -546,7 +554,6 @@ class Drone(Dynamics):
         Place agent at previous position.
         Do not change is_tagged, has_flag, or on_own_side.
         """
-
         prev_pos = self.prev_pos
         self.prev_pos = self.pos
         self.pos = prev_pos
@@ -562,7 +569,9 @@ class Drone(Dynamics):
             "yaw_rate": 0,
             "x_vel": 0,
             "y_vel": 0,
-            "z_vel": 0
+            "z_vel": 0,
+            "z_pos": self.state["z_pos"],  # Keep current z position
+            "target_z": self.state["target_z"]  # Keep target z position
         }
         self.state.update(new_state)
 
@@ -577,9 +586,10 @@ class Drone(Dynamics):
         Args:
             desired speed: desired speed, in m/s
             heading_error: heading error, in deg
+            vertical_speed: desired vertical speed, in m/s (positive is up)
         """
-
         desired_speed = clip(desired_speed, 0, self.max_speed)
+        vertical_speed = clip(vertical_speed, -self.max_vertical_speed, self.max_vertical_speed)
 
         # Constants
         g = 9.81
@@ -616,17 +626,13 @@ class Drone(Dynamics):
         cur_y_vel = self.state["y_vel"]
         des_y_acc = clip((des_y_vel - cur_y_vel) / self.dt, -10, 10)
 
-        # Placeholders for z for now so that it is easier to add in the future
-        des_z_pos = 0
-        des_z_vel = 0
-        des_z_acc = 0
-        z_pos = 0
-        z_vel = self.state["z_vel"]
+        # Vertical movement control
+        des_z_vel = vertical_speed
+        cur_z_vel = self.state["z_vel"]
+        des_z_acc = clip((des_z_vel - cur_z_vel) / self.dt, -self.max_vertical_accel, self.max_vertical_accel)
 
-        # Calculate vertical thrust and roll, pitch, and yaw torques.
-        thrust = m * (
-            g + des_z_acc + Kp_z * (des_z_pos - z_pos) + Kd_z * (des_z_vel - z_vel)
-        )
+        # Calculate vertical thrust and roll, pitch, and yaw torques
+        thrust = m * (g + des_z_acc + Kp_z * (self.state["target_z"] - self.state["z_pos"]) + Kd_z * (des_z_vel - cur_z_vel))
 
         roll_torque = (
             Kp_roll
@@ -668,9 +674,8 @@ class Drone(Dynamics):
         z_acc = acc[2]
         self.state["x_vel"] = cur_x_vel + x_acc * self.dt
         self.state["y_vel"] = cur_y_vel + y_acc * self.dt
-        z_vel += z_acc * self.dt
-        self.state["z_vel"] = z_vel
-        z_pos += z_vel * self.dt
+        self.state["z_vel"] = cur_z_vel + z_acc * self.dt
+        self.state["z_pos"] += self.state["z_vel"] * self.dt
 
         avg_x_vel = (cur_x_vel + self.state["x_vel"]) / 2.0
         avg_y_vel = (cur_y_vel + self.state["y_vel"]) / 2.0
@@ -682,8 +687,8 @@ class Drone(Dynamics):
         y_pos = self.pos[1] + avg_y_vel * self.dt
         
         self.prev_pos = self.pos
-        self.pos = np.asarray([x_pos, y_pos])
-        self.speed = np.sqrt(np.power(cur_x_vel, 2) + np.power(cur_y_vel, 2))
+        self.pos = np.asarray([x_pos, y_pos, self.state["z_pos"]])
+        self.speed = np.sqrt(np.power(cur_x_vel, 2) + np.power(cur_y_vel, 2) + np.power(cur_z_vel, 2))
 
 
 
