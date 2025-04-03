@@ -83,10 +83,12 @@ class RenderingPlayer(Player):
         #### new fields
         render_radius: Agent radius for rendering (pixels)
         pygame_agent: The pygame object that is drawn on screen.
+        is_drone: Whether this is a drone (affects rendering)
     """
 
     render_radius: float
     render_mode: str
+    is_drone: bool = False
 
     def __post_init__(self):
         """Called automatically after __init__ to set up pygame object interface."""
@@ -187,6 +189,19 @@ class RenderingPlayer(Player):
                 start_angle,
                 end_angle,
                 round(self.render_radius / 4),
+            )
+
+        # For drones, add altitude indicator
+        if self.is_drone:
+            # Draw altitude indicator (vertical line)
+            alt_height = min(2 * self.render_radius, max(0, self.pos[2] * 5))  # Scale z to pixels
+            alt_color = (0, 255, 0) if self.team == Team.BLUE_TEAM else (255, 0, 0)
+            draw.line(
+                self.pygame_agent,
+                alt_color,
+                (self.render_radius, self.render_radius),
+                (self.render_radius, self.render_radius - alt_height),
+                width=2
             )
 
 @dataclass
