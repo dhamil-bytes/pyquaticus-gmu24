@@ -88,7 +88,7 @@ class RenderingPlayer(Player):
 
     render_radius: float
     render_mode: str
-    is_drone: bool = False
+    is_drone_or_uuv: bool = False
 
     def __post_init__(self):
         """Called automatically after __init__ to set up pygame object interface."""
@@ -192,7 +192,7 @@ class RenderingPlayer(Player):
             )
 
         # For drones, add altitude indicator
-        if self.is_drone:
+        if self.is_drone_or_uuv:
             # Draw altitude indicator (vertical line)
             alt_height = min(2 * self.render_radius, max(0, self.pos[2] * 5))  # Scale z to pixels
             alt_color = (0, 255, 0) if self.team == Team.BLUE_TEAM else (255, 0, 0)
