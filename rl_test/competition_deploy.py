@@ -96,3 +96,15 @@ if __name__ == '__main__':
     easy_score = temp_score['blue_captures'] - temp_score['red_captures']
 
 
+'''
+Diane Hamilton
+rl_test/competition_deploy.py
+
+What it does:
+    Enacts policy given in a trained policy in a 2v2 pyquaticus environment
+    step = max(reward) based on policy for each observation in obs
+    
+Important notes:
+    does not edit or make moves based on [x,y] coords
+
+'''

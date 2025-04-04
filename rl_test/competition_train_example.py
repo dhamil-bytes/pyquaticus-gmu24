@@ -111,3 +111,19 @@ if __name__ == '__main__':
             print("Saving Checkpoint: ", i)
             chkpt_file = algo.save('./ray_test/')
             print(f'Saved to {chkpt_file}', flush=True)
+
+"""
+Diane Hamilton
+rl_test/competition_train_example.py
+
+What it does:
+    Adopts and executes the ideas of env creation and checkpoints from rl_test/competition_export_policy
+    
+
+Important notes:
+    Similar to rl_test/competition_export_policy
+    Provides example wrapper for training against a random policy
+    
+
+
+"""

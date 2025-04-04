@@ -87,3 +87,26 @@ if __name__ == '__main__':
 
     agent_0_policy.export_checkpoint("./policies/agent-0-policy")
     agent_1_policy.export_checkpoint("./policies/agent-1-policy")
+
+
+"""
+Diane Hamilton
+rl_test/competition_export_policy.py
+
+What it does:
+    Train a 2v2 policy in a 2v2 PyQuaticus environment
+    Creates a 2v2 PyquaticusBaseEnv (utilizes [x,y])
+    Utilizes RLib's PettingZoo_Wrapper (superclass to ParallelPettingZooWrapper) to initialize a PettingZoo env 
+    Maps policy based on team, observation space, and action space
+    Utilizes RLib's PPO to train agents based on policy and ships that into ppo_config (line 81)
+    Exports agent policies and checkpoints after training
+    
+Important notes:
+    POTENTIAL SPEED UP: Alter line 81 to support more rollout workers to decrease training time
+    RLib may allow emulation in 3D space using unity https://github.com/ray-project/ray/blob/master/rllib/env/wrappers/unity3d_env.py 
+
+    creates a PyQuaticusBaseEnv (utilizes [x,y])
+    RLib's PettingZoo Wrapper https://github.com/ray-project/ray/blob/master/rllib/env/wrappers/pettingzoo_env.py
+
+
+"""
