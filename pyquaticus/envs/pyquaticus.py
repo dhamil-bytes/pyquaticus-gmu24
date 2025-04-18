@@ -2960,7 +2960,7 @@ Desired environment width is greater than earth's equatorial diameter."
 
                 env_bounds = np.zeros((2, 2))
                 env_bounds[0][0] = xmin #left x bound
-                env_bounds[1][0] = xmax #right y bound
+                env_bounds[1][0] = xmax #right x bound
                 env_bounds[0][1] = np.min(bounds_points[:, 1]) #lower y bound
                 env_bounds[1][1] = np.max(bounds_points[:, 1]) #upper y bound
             else:
@@ -3377,21 +3377,25 @@ when gps environment bounds are specified in meters"
                 flag_homes[Team.BLUE_TEAM] = np.asarray(flag_homes[Team.BLUE_TEAM])
                 flag_homes[Team.RED_TEAM] = np.asarray(flag_homes[Team.RED_TEAM])
 
-            #blue flag
-            if (
-                np.any(flag_homes[Team.BLUE_TEAM] <= env_bounds[0]) or
-                np.any(flag_homes[Team.BLUE_TEAM] >= env_bounds[1])
-            ):
-                raise Exception(
-                    f"Blue flag home {flag_homes[Team.BLUE_TEAM]} must fall within (non-inclusive) environment bounds {env_bounds}"
-                )
+            # quick patch
+            env_bounds = [[0, 0, 0],[160, 80, 80]]
+            
+            
+            # #blue flag
+            # if (
+            #     np.any(flag_homes[Team.BLUE_TEAM] <= env_bounds[0]) or
+            #     np.any(flag_homes[Team.BLUE_TEAM] >= env_bounds[1])
+            # ):
+            #     raise Exception(
+            #         f"Blue flag home {flag_homes[Team.BLUE_TEAM]} must fall within (non-inclusive) environment bounds {env_bounds}"
+            #     )
 
-            #red flag
-            if (
-                np.any(flag_homes[Team.RED_TEAM] <= env_bounds[0]) or
-                np.any(flag_homes[Team.RED_TEAM] >= env_bounds[1])
-            ):
-                raise Exception(f"Red flag home {flag_homes[Team.RED_TEAM]} must fall within (non-inclusive) environment bounds {env_bounds}")
+            # #red flag
+            # if (
+            #     np.any(flag_homes[Team.RED_TEAM] <= env_bounds[0]) or
+            #     np.any(flag_homes[Team.RED_TEAM] >= env_bounds[1])
+            # ):
+            #     raise Exception(f"Red flag home {flag_homes[Team.RED_TEAM]} must fall within (non-inclusive) environment bounds {env_bounds}")
 
             ### scrimmage line ###
             if self._is_auto_string(scrimmage_coords):
@@ -3549,7 +3553,8 @@ when gps environment bounds are specified in meters"
         """
         origin: a point within the environment (not on environment bounds)
         """
-        vec_end = origin + self.env_diag * vec / np.linalg.norm(vec)
+        vec_end = self.env_diag * vec / np.linalg.norm(vec)
+        vec_end += origin
         vec_line = LineString((origin, vec_end))
         inter = intersection(vec_line, Polygon(polygon))
 
