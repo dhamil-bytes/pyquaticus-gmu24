@@ -182,7 +182,7 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
         Processes the raw discrete actions.
 
         Returns:
-            dict from agent id -> (speed, relative heading)
+            dict from agent id -> (speed, relative heading, vertical speed)
             Note: we use relative heading here so that it can be used directly
                   to the heading error in the PID controller
         """
@@ -228,11 +228,12 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                         speed = 0.0
                     else:
                         speed = self.max_speeds[player.id]
+                    vspd = 0.0 
             else:
                 # if no action provided, stop moving
-                speed, heading = 0.0, player.heading
+                speed, heading, vspd = 0.0, player.heading, 0.0
 
-            processed_action_dict[player.id] = np.array([speed, heading], dtype=np.float32)
+            processed_action_dict[player.id] = np.array([speed, heading, vspd], dtype=np.float32)
 
         return processed_action_dict
 
@@ -1085,12 +1086,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 self.state['agent_speed'][i] = player.speed
                 self.state['agent_heading'][i] = player.heading
                 continue
-
             # If agent is tagged, drive at max speed towards home
             if player.is_tagged:
                 flag_home = self.flags[team_idx].home
                 _, heading_error = mag_bearing_to(player.pos, flag_home, player.heading)
                 desired_speed = player.get_max_speed()
+                desired_vspd = 0.0 
 
             # If agent is out of bounds, drive back in bounds at fraction of max speed
             elif self.state["agent_oob"][i]:
@@ -1099,18 +1100,19 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                 edge_vec = np.diff(self.env_edges[closest_env_edge_idx], axis=0)[0]
                 desired_vec = np.array([-edge_vec[1], edge_vec[0]]) #this points inwards because edges are defined ccw
                 _, desired_heading = vec_to_mag_heading(desired_vec)
-                
                 heading_error = angle180((desired_heading - player.heading) % 360)
                 desired_speed = player.get_max_speed() * self.oob_speed_frac
+                desired_vspd = 0.0 
 
-            # Else get desired speed and heading from action_dict
+            # Else get desired speed, heading, and vspd from action_dict
             else:
-                desired_speed, heading_error = action_dict[player.id]
+                desired_speed, heading_error, desired_vspd = action_dict[player.id]
 
             # Move agent
-            player._move_agent(desired_speed, heading_error)
+            player._move_agent(desired_speed, heading_error, desired_vspd)
 
             # Check if agent is in keepout region for their own flag
+            flag_loc = self.flags[team_idx].home # Use home directly (should be 3D after init fix)
             ag_dis_2_flag = self.get_distance_between_2_points(player.pos, np.asarray(flag_loc))
             if (
                 ag_dis_2_flag < self.flag_keepout_radius
@@ -1524,7 +1526,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         """Untags the player if they return to their own flag."""
         for i, player in enumerate(self.players.values()):
             team = int(player.team)
-            flag_home = self.flags[team].home
+            flag_home = self.flags[team].home # Use home directly
             flag_distance = self.get_distance_between_2_points(
                 player.pos, flag_home
             )
@@ -1538,7 +1540,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             agent_poses = self.state['agent_position'][team_agent_inds]
             flag_home = self.flags[int(team)].home
 
-            flag_distances = np.linalg.norm(flag_home - agent_poses)
+            flag_distances = np.linalg.norm(flag_home - agent_poses, axis=-1)
             agent_is_tagged = self.state['agent_is_tagged'][team_agent_inds]
 
             agent_untagged = (flag_distances < self.catch_radius) & agent_is_tagged
@@ -3103,11 +3105,11 @@ when gps environment bounds are specified in meters"
             ### flags home ###
             # auto home
             if self._is_auto_string(flag_homes[Team.BLUE_TEAM]) and self._is_auto_string(flag_homes[Team.RED_TEAM]):
-                flag_homes[Team.BLUE_TEAM] = wrap_mercator_x(
-                    env_bounds[0] + np.array([7/8 * self.env_size[0], 0.5 * self.env_size[1]])
+                flag_homes[Team.BLUE_TEAM] = wrap_mercator_x_dist(
+                    env_bounds[0] + np.array([7/8 * self.env_size[0], 0.5 * self.env_size[1], 0.0])
                 )
-                flag_homes[Team.RED_TEAM] = wrap_mercator_x(
-                    env_bounds[0] + np.array([1/8 * self.env_size[0], 0.5 * self.env_size[1]])
+                flag_homes[Team.RED_TEAM] = wrap_mercator_x_dist(
+                    env_bounds[0] + np.array([1/8 * self.env_size[0], 0.5 * self.env_size[1], 0.0])
                 )
             elif self._is_auto_string(flag_homes[Team.BLUE_TEAM]) or self._is_auto_string(flag_homes[Team.RED_TEAM]):
                 raise Exception("Flag homes should be either all 'auto', or all specified")
@@ -3127,23 +3129,27 @@ when gps environment bounds are specified in meters"
             flag_homes[Team.BLUE_TEAM] = wrap_mercator_x_dist(flag_homes[Team.BLUE_TEAM] - env_bounds[0]) 
             flag_homes[Team.RED_TEAM] = wrap_mercator_x_dist(flag_homes[Team.RED_TEAM] - env_bounds[0])
 
-            # blue flag
+            # Append Z=0 to make flag homes 3D
+            flag_homes[Team.BLUE_TEAM] = np.append(flag_homes[Team.BLUE_TEAM], 0.0)
+            flag_homes[Team.RED_TEAM] = np.append(flag_homes[Team.RED_TEAM], 0.0)
+
+            #blue flag
             if (
-                np.any(flag_homes[Team.BLUE_TEAM] <= 0) or
-                np.any(flag_homes[Team.BLUE_TEAM] >= self.env_size)
-            ):
+                np.any(flag_homes[Team.BLUE_TEAM][:2] <= env_bounds[0]) or #
+                np.any(flag_homes[Team.BLUE_TEAM][:2] >= env_bounds[1])
+            ):  
+                # temp check
                 raise Exception(
-                    f"Blue flag home {flag_homes[Team.BLUE_TEAM]} must fall within (non-inclusive) environment bounds {env_bounds}"
+                    f"Blue flag home XY {flag_homes[Team.BLUE_TEAM][:2]} is out of bounds {env_bounds}"
                 )
 
             #red flag
             if (
-                np.any(flag_homes[Team.RED_TEAM] <= 0) or
-                np.any(flag_homes[Team.RED_TEAM] >= self.env_size)
+                np.any(flag_homes[Team.RED_TEAM][:2] <= env_bounds[0]) or 
+                np.any(flag_homes[Team.RED_TEAM][:2] >= env_bounds[1])
             ):
-                raise Exception(
-                    f"Red flag home {flag_homes[Team.RED_TEAM]} must fall within (non-inclusive) environment bounds {env_bounds}"
-                )
+                # temp check
+                raise Exception(f"Red flag home XY {flag_homes[Team.RED_TEAM][:2]} is out of bounds {env_bounds}")
 
             # unit
             flag_homes_unit = "wm_xy"
@@ -3361,8 +3367,8 @@ when gps environment bounds are specified in meters"
                     raise Exception(
                         "'ll' (Lat/Long) and 'wm_xy' (web mercator xy) units should only be used when gps_env is True"
                     )
-                flag_homes[Team.BLUE_TEAM] = np.array([7/8*self.env_size[0], 0.5*self.env_size[1]])
-                flag_homes[Team.RED_TEAM] = np.array([1/8*self.env_size[0], 0.5*self.env_size[1]])
+                flag_homes[Team.BLUE_TEAM] = np.array([7/8*self.env_size[0], 0.5*self.env_size[1], 0.0])
+                flag_homes[Team.RED_TEAM] = np.array([1/8*self.env_size[0], 0.5*self.env_size[1], 0.0])
             elif self._is_auto_string(flag_homes[Team.BLUE_TEAM]) or self._is_auto_string(flag_homes[Team.RED_TEAM]):
                 raise Exception(
                     "Flag homes are either all 'auto', or all specified"
@@ -3475,17 +3481,18 @@ when gps environment bounds are specified in meters"
         self.flag_homes = flag_homes
         self.flag_homes_unit = flag_homes_unit
 
-        self.scrimmage_coords = scrimmage_coords
+        self.scrimmage_coords = np.asarray(scrimmage_coords)
         self.scrimmage_coords_unit = scrimmage_coords_unit
-        self.scrimmage_vec = scrimmage_coords[1] - scrimmage_coords[0]
+        self.scrimmage_vec = self.scrimmage_coords[1][:2] - self.scrimmage_coords[0][:2]
 
-        # on sides
-        scrim2blue = self.flag_homes[Team.BLUE_TEAM] - scrimmage_coords[0]
-        scrim2red = self.flag_homes[Team.RED_TEAM] - scrimmage_coords[0]
+        scrim2blue = self.flag_homes[Team.BLUE_TEAM] - self.scrimmage_coords[0][:2]
+        scrim2red = self.flag_homes[Team.RED_TEAM] - self.scrimmage_coords[0][:2]
 
         self.on_sides_sign = {}
-        self.on_sides_sign[Team.BLUE_TEAM] = np.sign(np.cross(self.scrimmage_vec, scrim2blue))
-        self.on_sides_sign[Team.RED_TEAM] = np.sign(np.cross(self.scrimmage_vec, scrim2red))
+
+        self.on_sides_sign[Team.BLUE_TEAM] = np.sign(np.cross(self.scrimmage_vec[:2], scrim2blue[:2]))
+        self.on_sides_sign[Team.RED_TEAM] = np.sign(np.cross(self.scrimmage_vec[:2], scrim2red[:2]))
+
 
         # flag bisection check
         if self.on_sides_sign[Team.BLUE_TEAM] == self.on_sides_sign[Team.RED_TEAM]:
