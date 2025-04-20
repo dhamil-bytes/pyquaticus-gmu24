@@ -40,6 +40,35 @@ def rot2d(vector: np.ndarray, theta) -> np.ndarray:
 
     return np.dot(rot, vector)
 
+def rot3d(vector: np.ndarray, theta_xy: float, theta_z: float = 0.0) -> np.ndarray:
+    """
+    Rotate a 3D vector around the origin.
+    Args:
+        vector: 3D vector [x, y, z]
+        theta_xy: rotation in xy plane (yaw) in radians
+        theta_z: rotation in z axis (pitch) in radians, default 0
+    Returns:
+        Rotated 3D vector
+    """
+    assert vector.shape == (3,), "rot3d requires a 3D vector as input"
+    
+    # First rotate in xy plane (yaw)
+    rot_xy = np.array([
+        [np.cos(theta_xy), -np.sin(theta_xy), 0],
+        [np.sin(theta_xy), np.cos(theta_xy), 0],
+        [0, 0, 1]
+    ])
+    
+    # Then rotate in z axis (pitch)
+    rot_z = np.array([
+        [np.cos(theta_z), 0, -np.sin(theta_z)],
+        [0, 1, 0],
+        [np.sin(theta_z), 0, np.cos(theta_z)]
+    ])
+    
+    # Apply rotations in sequence
+    return np.dot(rot_z, np.dot(rot_xy, vector))
+
 def rc_intersection(
     ray: np.ndarray, circle_center: np.ndarray, circle_radius
 ) -> np.ndarray:
@@ -441,19 +470,37 @@ def detect_collision(
     poses: np.ndarray,
     agent_radius: float,
     obstacle_geoms: dict,
-    padding:float = 1e-4
-):
-    poses = np.expand_dims(poses.reshape(-1, 2), axis=1)
+    padding: float = 1e-4
+) -> np.ndarray:
+    """
+    Detect collisions between agents and obstacles in 3D.
+    Only checks xy plane collisions since obstacles are 2D.
+    Z-axis bounds are checked separately in the environment.
+    
+    Args:
+        poses: Nx2 or Nx3 array of positions
+        agent_radius: radius of agent for collision checking
+        obstacle_geoms: dict with obstacle geometries
+        padding: small padding to avoid numerical issues
+    Returns:
+        Array of booleans indicating collision for each pose
+    """
+    if len(poses.shape) == 1:
+        poses = poses.reshape(1, -1)
+    
+    # Extract xy coordinates for collision checking
+    xy_poses = poses[:, :2] if poses.shape[1] > 2 else poses
+    xy_poses = np.expand_dims(xy_poses.reshape(-1, 2), axis=1)
     collisions = np.zeros(poses.shape[0], dtype=bool)
 
     for obstacle_type, geoms in obstacle_geoms.items():
         if obstacle_type == "circle":
-            dists = np.linalg.norm(poses - geoms[:, 1:], axis=-1) - geoms[:, 0]
+            dists = np.linalg.norm(xy_poses - geoms[:, 1:], axis=-1) - geoms[:, 0]
             collisions |= np.any(dists <= agent_radius + padding, axis=-1)
         else: #polygon obstacle
             #determine closest points on all obtacle line segments
             v_AB = np.diff(geoms, axis=-2)
-            v_AP = poses - geoms[:, 0] #take only first point of segment (but preserve num dimensions)
+            v_AP = xy_poses - geoms[:, 0] #take only first point of segment (but preserve num dimensions)
             v_AB_AP = np.sum(v_AP * v_AB.squeeze(axis=-2), axis=-1) #dot product
 
             mag_AB = np.linalg.norm(v_AB, axis=-1)
@@ -465,7 +512,7 @@ def detect_collision(
             closest_points = np.where(proj_mag >= mag_AB, geoms[:, 1], closest_points)
 
             #calculate distances to obstacles
-            distances = np.linalg.norm(poses - closest_points, axis=-1)
+            distances = np.linalg.norm(xy_poses - closest_points, axis=-1)
             collisions |= np.any(distances <= agent_radius + padding, axis=-1)
     
     if collisions.shape[0] == 1:
@@ -507,4 +554,3 @@ def closest_line(
         closest_line = closest_line.item()
 
     return closest_line
-    

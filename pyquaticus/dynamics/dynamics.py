@@ -148,7 +148,8 @@ class FixedWing(Dynamics):
 
 class SingleIntegrator(Dynamics):
 
-    def __init__(self, max_speed: float = 10, max_turn_rate: float = 90, **kwargs):
+    def __init__(
+        self, max_speed: float = 10, max_turn_rate: float = 90, **kwargs):
 
         super().__init__(**kwargs)
 
@@ -710,7 +711,7 @@ class UUV(Dynamics):
             "y_vel": 0,
             "z_vel": 0,
             "z_pos": 0,  # Current z position
-            "target_z": 0  # Target z position for altitude control
+            "target_z": 0  # Target z position for depth control
         }
         self.state.update(addl_state)
 
@@ -756,74 +757,71 @@ class UUV(Dynamics):
 
     def _move_agent(self, desired_speed: float, heading_error: float, vertical_speed: float = 0.0):
         """
-        Use quadcopter dynamics to move the agent given a desired speed and heading error.
-        Adapted from https://github.com/AtsushiSakai/PythonRobotics?tab=readme-ov-file#drone-3d-trajectory-following
-
+        Simple UUV dynamics - similar to Drone but with reversed gravity effect.
+        
         Args:
-            desired speed: desired speed, in m/s
+            desired_speed: desired speed, in m/s
             heading_error: heading error, in deg
             vertical_speed: desired vertical speed, in m/s (positive is up)
         """
         desired_speed = clip(desired_speed, 0, self.max_speed)
         vertical_speed = clip(vertical_speed, -self.max_vertical_speed, self.max_vertical_speed)
 
-        # Constants
-        g = 9.81
-        m = 0.2
-        Ixx = 1
-        Iyy = 1
-        Izz = 1
+        # Constants (similar to Drone but with negative gravity)
+        g = -9.81  # negative gravity to make neutral buoyancy
+        m = 1.0    # mass in kg
 
-        # PID control coefficients
-        Kp_x = 1
-        Kp_y = 1
-        Kp_z = 1
+        # PID control gains (same as Drone)
+        Kp_z = 1.0  # proportional gain for z
+        Kd_z = 2.0  # derivative gain for z
 
-
-        Kd_x = 1
-        Kd_y = 1
-        Kd_z = 1
-
-
-
-        # Calculate desired acceleration in x and y directions
+        # Calculate desired velocities
+        yaw = np.deg2rad(self.heading)
+        des_yaw = yaw + np.deg2rad(heading_error)
         des_x_vel = desired_speed * np.sin(des_yaw)
-        cur_x_vel = self.state["x_vel"]
-        des_x_acc = clip((des_x_vel - cur_x_vel) / self.dt, -10, 10)
         des_y_vel = desired_speed * np.cos(des_yaw)
-        cur_y_vel = self.state["y_vel"]
-        des_y_acc = clip((des_y_vel - cur_y_vel) / self.dt, -10, 10)
-
-        # Vertical movement control
         des_z_vel = vertical_speed
+
+        # Current velocities
+        cur_x_vel = self.state["x_vel"]
+        cur_y_vel = self.state["y_vel"]
         cur_z_vel = self.state["z_vel"]
+
+        # Calculate accelerations
+        x_acc = clip((des_x_vel - cur_x_vel) / self.dt, -10, 10)
+        y_acc = clip((des_y_vel - cur_y_vel) / self.dt, -10, 10)
+        
+        # Vertical control similar to Drone but with negative gravity
         des_z_acc = clip((des_z_vel - cur_z_vel) / self.dt, -self.max_vertical_accel, self.max_vertical_accel)
-
-        # Calculate vertical thrust and roll, pitch, and yaw torques
         thrust = m * (g + des_z_acc + Kp_z * (self.state["target_z"] - self.state["z_pos"]) + Kd_z * (des_z_vel - cur_z_vel))
+        z_acc = thrust / m - g
 
-
-        # Transform into world frame to get x, y, and z accelerations, velocities, and positions
-        x_acc = acc[0]
-        y_acc = acc[1]
-        z_acc = acc[2]
+        # Update velocities
         self.state["x_vel"] = cur_x_vel + x_acc * self.dt
         self.state["y_vel"] = cur_y_vel + y_acc * self.dt
         self.state["z_vel"] = cur_z_vel + z_acc * self.dt
+
+        # Update z position
         self.state["z_pos"] += self.state["z_vel"] * self.dt
 
+        # Calculate average velocities for position update
         avg_x_vel = (cur_x_vel + self.state["x_vel"]) / 2.0
         avg_y_vel = (cur_y_vel + self.state["y_vel"]) / 2.0
+
+        # Apply GPS environment scaling if needed
         if self.gps_env:
             avg_x_vel = avg_x_vel / self.meters_per_mercator_xy
             avg_y_vel = avg_y_vel / self.meters_per_mercator_xy
 
+        # Update position
         x_pos = self.pos[0] + avg_x_vel * self.dt
         y_pos = self.pos[1] + avg_y_vel * self.dt
         
+        # Update state
         self.prev_pos = self.pos
         self.pos = np.asarray([x_pos, y_pos, self.state["z_pos"]])
         self.speed = np.sqrt(np.power(cur_x_vel, 2) + np.power(cur_y_vel, 2) + np.power(cur_z_vel, 2))
+        self.heading = np.rad2deg(des_yaw)
 
 
 class DoubleIntegrator(Dynamics):
@@ -922,4 +920,3 @@ class DoubleIntegrator(Dynamics):
         self.pos = np.asarray(new_ag_pos)
         self.speed = clip(new_speed, 0.0, self.max_speed)
         self.heading = angle180(new_heading)
-

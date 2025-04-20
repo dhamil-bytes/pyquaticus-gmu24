@@ -36,11 +36,18 @@ class ObsNormalizer:
     is automatically managed (and corresponds to registration order). The
     raw observations should be passed as a dictionary with keys corresponding
     to the registered observation elements.
+
+    For 3D movement, the following observations are added:
+    - z_pos: Vertical position (meters), normalized to [-1, 1] using z_bounds
+    - z_vel: Vertical velocity (m/s), normalized to [-1, 1] using max_vertical_speed
+    - target_z: Target altitude (meters), normalized to [-1, 1] using z_bounds
     """
 
     def __init__(self, debug=False):
         self._bounds = OrderedDict()
         self._debug = debug
+        self._z_bounds = None
+        self._max_vertical_speed = None
 
     @property
     def flattened_length(self):
@@ -94,6 +101,38 @@ class ObsNormalizer:
             low=np.asarray(lower_bounds, dtype=np.float32),
             high=np.asarray(upper_bounds, dtype=np.float32),
             shape=shape,
+        )
+
+    def register_3d_bounds(self, z_bounds, max_vertical_speed):
+        """
+        Register bounds for 3D movement observations.
+        
+        Args:
+            z_bounds: [min_z, max_z] vertical limits in meters
+            max_vertical_speed: maximum vertical speed in m/s
+        """
+        self._z_bounds = z_bounds
+        self._max_vertical_speed = max_vertical_speed
+        
+        # Register z position bounds
+        self.register(
+            "z_pos",
+            upper_bounds=[z_bounds[1]],
+            lower_bounds=[z_bounds[0]]
+        )
+        
+        # Register vertical velocity bounds
+        self.register(
+            "z_vel",
+            upper_bounds=[max_vertical_speed],
+            lower_bounds=[-max_vertical_speed]
+        )
+        
+        # Register target altitude bounds (same as z_pos)
+        self.register(
+            "target_z",
+            upper_bounds=[z_bounds[1]],
+            lower_bounds=[z_bounds[0]]
         )
 
     def flattened(self, obs: Dict[str, np.ndarray]):

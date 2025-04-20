@@ -38,6 +38,7 @@ class Player:
         pos: The position of the agent [x, y, z]
         speed: The speed of the agent (m / s)
         heading: The heading of the agent (deg), maritime convention: north is 0, east is 90
+        vspeed: The vertical speed of the agent (m / s)
         prev_pos: The previous position of the agent
         has_flag: Indicator for whether or not the agent has the flag
         on_own_side: Indicator for whether or not the agent is on its own side of the field.
@@ -52,6 +53,7 @@ class Player:
     pos: list[float] = field(init=False, default_factory=lambda: [0.0, 0.0, 0.0])
     speed: float = field(init=False, default_factory=float)
     heading: float = field(init=False, default_factory=float)
+    vspeed: float = field(init=False, default_factory=float)  # Vertical speed in m/s
     prev_pos: list[float] = field(init=False, default_factory=lambda: [0.0, 0.0, 0.0])
     has_flag: bool = field(init=False, default=False)
     on_own_side: bool = field(init=False, default=True)
@@ -73,6 +75,7 @@ class RenderingPlayer(Player):
         pos: The position of the agent [x, y, z]
         speed: The speed of the agent (m / s)
         heading: The heading of the agent (deg), maritime convention: north is 0, east is 90
+        vspeed: The vertical speed of the agent (m / s)
         prev_pos: The previous position of the agent
         has_flag: Indicator for whether or not the agent has the flag
         on_own_side: Indicator for whether or not the agent is on its own side of the field.
@@ -82,8 +85,8 @@ class RenderingPlayer(Player):
         oob: Indicator for whether or not this player is out-of-bounds
         #### new fields
         render_radius: Agent radius for rendering (pixels)
-        pygame_agent: The pygame object that is drawn on screen.
-        is_drone: Whether this is a drone (affects rendering)
+        render_mode: The mode of rendering
+        is_drone_or_uuv: Whether this is a drone (affects rendering)
     """
 
     render_radius: float
