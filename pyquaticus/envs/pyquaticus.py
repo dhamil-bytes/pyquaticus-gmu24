@@ -18,7 +18,14 @@
 # work.
 
 # SPDX-License-Identifier: BSD-3-Clause
+
+# Add 3D movement support
 from .movement_3d import process_3d_movement, update_3d_state
+
+# Add speed_heading support
+from .speed_heading import _to_speed_heading
+
+
 import colorsys
 import contextily as cx
 import copy
