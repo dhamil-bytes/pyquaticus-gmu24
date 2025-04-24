@@ -23,7 +23,6 @@ def update_3d_state(state, players):
     if 'agent_z_position' not in state:
         state['agent_z_position'] = np.zeros(len(players))
         state['agent_z_velocity'] = np.zeros(len(players))
-        state['agent_target_z'] = np.zeros(len(players))
     
     for i, player in enumerate(players.values()):
         if hasattr(player, 'z_pos'):

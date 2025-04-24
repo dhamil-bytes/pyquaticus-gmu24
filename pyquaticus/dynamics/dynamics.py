@@ -522,8 +522,7 @@ class Drone(Dynamics):
             "x_vel": 0,
             "y_vel": 0,
             "z_vel": 0,
-            "z_pos": 0,  # Current z position
-            "target_z": 0  # Target z position for altitude control
+            "z_pos": 0  # Current z position
         }
         self.state.update(addl_state)
 
@@ -633,7 +632,7 @@ class Drone(Dynamics):
         des_z_acc = clip((des_z_vel - cur_z_vel) / self.dt, -self.max_vertical_accel, self.max_vertical_accel)
 
         # Calculate vertical thrust and roll, pitch, and yaw torques
-        thrust = m * (g + des_z_acc + Kp_z * (self.state["target_z"] - self.state["z_pos"]) + Kd_z * (des_z_vel - cur_z_vel))
+        thrust = m * (g + des_z_acc + Kd_z * (des_z_vel - cur_z_vel))
 
         roll_torque = (
             Kp_roll
@@ -710,8 +709,7 @@ class UUV(Dynamics):
             "x_vel": 0,
             "y_vel": 0,
             "z_vel": 0,
-            "z_pos": 0,  # Current z position
-            "target_z": 0  # Target z position for depth control
+            "z_pos": 0  # Current z position
         }
         self.state.update(addl_state)
 
@@ -793,7 +791,7 @@ class UUV(Dynamics):
         
         # Vertical control similar to Drone but with negative gravity
         des_z_acc = clip((des_z_vel - cur_z_vel) / self.dt, -self.max_vertical_accel, self.max_vertical_accel)
-        thrust = m * (g + des_z_acc + Kp_z * (self.state["target_z"] - self.state["z_pos"]) + Kd_z * (des_z_vel - cur_z_vel))
+        thrust = m * (g + des_z_acc + Kd_z * (des_z_vel - cur_z_vel))
         z_acc = thrust / m - g
 
         # Update velocities

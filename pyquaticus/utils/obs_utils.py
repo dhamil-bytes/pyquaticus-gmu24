@@ -40,7 +40,7 @@ class ObsNormalizer:
     For 3D movement, the following observations are added:
     - z_pos: Vertical position (meters), normalized to [-1, 1] using z_bounds
     - z_vel: Vertical velocity (m/s), normalized to [-1, 1] using max_vertical_speed
-    - target_z: Target altitude (meters), normalized to [-1, 1] using z_bounds
+
     """
 
     def __init__(self, debug=False):
@@ -128,12 +128,7 @@ class ObsNormalizer:
             lower_bounds=[-max_vertical_speed]
         )
         
-        # Register target altitude bounds (same as z_pos)
-        self.register(
-            "target_z",
-            upper_bounds=[z_bounds[1]],
-            lower_bounds=[z_bounds[0]]
-        )
+
 
     def flattened(self, obs: Dict[str, np.ndarray]):
         """
