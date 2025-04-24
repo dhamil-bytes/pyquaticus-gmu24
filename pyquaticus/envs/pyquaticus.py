@@ -519,6 +519,10 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             obs["team_score"] = self.state["captures"][team_idx]
             obs["opponent_score"] = self.state["captures"][other_team_idx]
 
+            # 3D state variables
+            obs["z_position"] = getattr(agent, 'z_pos', 0.0)
+            obs["z_velocity"] = getattr(agent, 'z_vel', 0.0)
+
             # Lidar
             obs["ray_distances"] = self.state["lidar_distances"][agent_id]
             obs["ray_labels"] = self.obj_ray_detection_states[own_team][self.state["lidar_labels"][agent_id]]
@@ -1122,6 +1126,12 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     self.state['team_has_flag'][team_idx] = 0
 
                 player.rotate()
+                # Reset 3D state variables if they exist
+                if hasattr(player, 'z_pos') and hasattr(player, 'z_vel'):
+                    player.z_pos = 0.0  # Reset to ground/surface level
+                    player.z_vel = 0.0  # Stop vertical movement
+                    self.state['agent_z_position'][i] = 0.0
+                    self.state['agent_z_velocity'][i] = 0.0
                 self.state['agent_position'][i] = player.pos
                 self.state['prev_agent_position'][i] = player.prev_pos
                 self.state['agent_speed'][i] = player.speed
@@ -1568,9 +1578,13 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         for i, player in enumerate(self.players.values()):
             team = int(player.team)
             flag_home = self.flags[team].home # Use home directly
-            flag_distance = self.get_distance_between_2_points(
-                player.pos, flag_home
-            )
+            # Calculate 3D distance if z_pos is available
+            if hasattr(player, 'z_pos'):
+                player_pos = np.array([*player.pos, player.z_pos])
+                flag_home_3d = np.array([*flag_home, 0.0])  # Flag home is at z=0
+                flag_distance = np.linalg.norm(player_pos - flag_home_3d)
+            else:
+                flag_distance = self.get_distance_between_2_points(player.pos, flag_home)
             if flag_distance < self.catch_radius and player.is_tagged:
                 player.is_tagged = False
                 self.state['agent_is_tagged'][i] = 0
@@ -1581,7 +1595,14 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             agent_poses = self.state['agent_position'][team_agent_inds]
             flag_home = self.flags[int(team)].home
 
-            flag_distances = np.linalg.norm(flag_home - agent_poses, axis=-1)
+            # Calculate 3D distances if z_pos is available
+            if 'agent_z_position' in self.state:
+                agent_z_pos = self.state['agent_z_position'][team_agent_inds]
+                agent_poses_3d = np.column_stack([agent_poses, agent_z_pos])
+                flag_home_3d = np.array([*flag_home, 0.0])  # Flag home is at z=0
+                flag_distances = np.linalg.norm(flag_home_3d - agent_poses_3d, axis=-1)
+            else:
+                flag_distances = np.linalg.norm(flag_home - agent_poses, axis=-1)
             agent_is_tagged = self.state['agent_is_tagged'][team_agent_inds]
 
             agent_untagged = (flag_distances < self.catch_radius) & agent_is_tagged
@@ -2105,6 +2126,7 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
     def get_distance_between_2_points(self, start: np.ndarray, end: np.ndarray) -> float:
         """
         Convenience method for returning distance between two points.
+        Handles both 2D and 3D points.
 
         Args:
             start: Starting position to measure from
@@ -2112,7 +2134,23 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         Returns:
             The distance between `start` and `end`
         """
-        return np.linalg.norm(np.asarray(start) - np.asarray(end))
+        # Convert to numpy arrays
+        start = np.asarray(start)
+        end = np.asarray(end)
+
+        # If start is a Player object with z_pos, use 3D distance
+        if hasattr(start, 'z_pos'):
+            start_3d = np.array([*start.pos, start.z_pos])
+            end_3d = np.array([*end, 0.0]) if len(end) == 2 else end
+            return np.linalg.norm(start_3d - end_3d)
+        # If end is a Player object with z_pos, use 3D distance
+        elif hasattr(end, 'z_pos'):
+            end_3d = np.array([*end.pos, end.z_pos])
+            start_3d = np.array([*start, 0.0]) if len(start) == 2 else start
+            return np.linalg.norm(start_3d - end_3d)
+        # Otherwise use regular 2D distance
+        else:
+            return np.linalg.norm(start - end)
 
     def _set_dones(self):
         """Check all of the end game conditions."""
@@ -2844,37 +2882,52 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
         """
         Returns a list of numbers of length self.num_agents
         where each number is the corresponding agents min distance to a boundary wall.
+        For 3D vehicles, also includes distances to top and bottom boundaries.
         """
         distances_to_walls = defaultdict(dict)
         for player in self.players.values():
             i = player.id
             x_pos = player.pos[0]
             y_pos = player.pos[1]
+            z_pos = player.pos[2] if len(player.pos) > 2 else 0.0
 
+            # Horizontal boundaries
             distances_to_walls[i]["left_dist"] = x_pos
             distances_to_walls[i]["right_dist"] = self.env_size[0] - x_pos
             distances_to_walls[i]["bottom_dist"] = y_pos
             distances_to_walls[i]["top_dist"] = self.env_size[1] - y_pos
 
+            # Vertical boundaries (for 3D vehicles)
+            distances_to_walls[i]["ground_dist"] = z_pos  # Distance to ground (z=0)
+            distances_to_walls[i]["ceiling_dist"] = self.env_size[2] if len(self.env_size) > 2 else float('inf')  # Distance to ceiling
+
         return distances_to_walls
 
     def _get_dists_between_agents(self):
-        """Returns dictionary of distances between agents indexed by agent numbers."""
+        """Returns dictionary of 3D distance vectors between agents indexed by agent numbers."""
         agt_to_agt_vecs = {}
 
         for player in self.players.values():
             i = player.id
             agt_to_agt_vecs[i] = {}
             i_pos = player.pos
+            i_z = i_pos[2] if len(i_pos) > 2 else 0.0
+            
             for other_player in self.players.values():
                 j = other_player.id
                 j_pos = other_player.pos
-                agt_to_agt_vecs[i][j] = [j_pos[0] - i_pos[0], j_pos[1] - i_pos[1]]
+                j_z = j_pos[2] if len(j_pos) > 2 else 0.0
+                
+                agt_to_agt_vecs[i][j] = [
+                    j_pos[0] - i_pos[0], 
+                    j_pos[1] - i_pos[1],
+                    j_z - i_z
+                ]
 
         return agt_to_agt_vecs
 
     def _get_dist_to_flags(self):
-        """Returns a dictionary mapping observation keys to 2d arrays."""
+        """Returns a dictionary mapping observation keys to 3D distance vectors."""
         flag_vecs = {}
 
         for player in self.players.values():
@@ -2883,23 +2936,49 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             i_pos = player.pos
             proFlag_pos = self.flags[team_idx].pos
             retFlag_pos = self.flags[int(not team_idx)].pos
-            flag_vecs[player.id]["own_home_dist"] = [proFlag_pos[0] - i_pos[0], proFlag_pos[1] - i_pos[1]]
+            
+            # Get z-coordinates or default to 0 if not present
+            i_z = i_pos[2] if len(i_pos) > 2 else 0.0
+            proFlag_z = proFlag_pos[2] if len(proFlag_pos) > 2 else 0.0
+            retFlag_z = retFlag_pos[2] if len(retFlag_pos) > 2 else 0.0
+            
+            # Calculate 3D distance vectors
+            flag_vecs[player.id]["own_home_dist"] = [
+                proFlag_pos[0] - i_pos[0], 
+                proFlag_pos[1] - i_pos[1],
+                proFlag_z - i_z
+            ]
             flag_vecs[player.id]["opponent_home_dist"] = [
                 retFlag_pos[0] - i_pos[0],
                 retFlag_pos[1] - i_pos[1],
+                retFlag_z - i_z
             ]
 
         return flag_vecs
 
     def _get_dist_bearing_to_obstacles(self):
-        """Computes the distance and heading from each player to each obstacle"""
+        """Computes the distance, horizontal bearing, and vertical angle from each player to each obstacle.
+        For 3D vehicles, this includes vertical angles to obstacles."""
         dist_bearing_to_obstacles = dict()
         for player in self.players.values():
             player_pos = player.pos
+            player_z = player_pos[2] if len(player_pos) > 2 else 0.0
             player_dists_to_obstacles = list()
             for obstacle in self.obstacles:
-                # TODO: vectorize
-                dist_to_obstacle = obstacle.distance_from(player_pos, radius=self.agent_radius, heading=player.heading)
+                # Get 2D distance and bearing from obstacle
+                dist_to_obstacle = obstacle.distance_from(player_pos[:2], radius=self.agent_radius, heading=player.heading)
+                
+                # Add vertical angle if this is a 3D vehicle
+                if len(player_pos) > 2:
+                    # Assuming obstacles are vertical walls extending from ground to ceiling
+                    # Calculate vertical angle from player to closest point on obstacle
+                    horizontal_dist = dist_to_obstacle[0]  # First element is distance
+                    if horizontal_dist > 0:
+                        vertical_angle = np.degrees(np.arctan2(-player_z, horizontal_dist))
+                    else:
+                        vertical_angle = -90 if player_z > 0 else 90
+                    dist_to_obstacle = (*dist_to_obstacle, vertical_angle)
+                
                 player_dists_to_obstacles.append(dist_to_obstacle)
             dist_bearing_to_obstacles[player.id] = player_dists_to_obstacles
         self.state["dist_bearing_to_obstacles"] = dist_bearing_to_obstacles
@@ -3134,17 +3213,21 @@ when gps environment bounds are specified in meters"
             self.env_size = wrap_mercator_x_dist(np.diff(env_bounds, axis=0)[0])
             self.env_diag = np.linalg.norm(self.env_size)
 
-            self.env_ll = np.array([0.0, 0.0])              #ll = lower left
-            self.env_lr = np.array([self.env_size[0], 0.0]) #lr = lower right
-            self.env_ur = np.array(self.env_size)           #ur = upper right
-            self.env_ul = np.array([0.0, self.env_size[1]]) #ul = upper left
+            # Initialize environment corners with z=0 for 3D space
+            self.env_ll = np.array([0.0, 0.0, 0.0])                    # ll = lower left
+            self.env_lr = np.array([self.env_size[0], 0.0, 0.0])      # lr = lower right
+            self.env_ur = np.array([self.env_size[0], self.env_size[1], 0.0])  # ur = upper right
+            self.env_ul = np.array([0.0, self.env_size[1], 0.0])      # ul = upper left
 
+            # Store corners as 3D points
             self.env_corners = np.array([
                 self.env_ll,
                 self.env_lr,
                 self.env_ur,
                 self.env_ul
             ])
+            
+            # Store edges as pairs of 3D points
             self.env_edges = np.array([
                 [self.env_ll, self.env_lr],
                 [self.env_lr, self.env_ur],
@@ -3155,12 +3238,19 @@ when gps environment bounds are specified in meters"
             ### flags home ###
             # auto home
             if self._is_auto_string(flag_homes[Team.BLUE_TEAM]) and self._is_auto_string(flag_homes[Team.RED_TEAM]):
+                # Initialize flag homes with z=0 for 3D coordinates
+                # Initialize flag homes with z=0 for 3D coordinates
                 flag_homes[Team.BLUE_TEAM] = wrap_mercator_x_dist(
                     env_bounds[0] + np.array([7/8 * self.env_size[0], 0.5 * self.env_size[1], 0.0])
                 )
                 flag_homes[Team.RED_TEAM] = wrap_mercator_x_dist(
                     env_bounds[0] + np.array([1/8 * self.env_size[0], 0.5 * self.env_size[1], 0.0])
                 )
+                # Add z-coordinate (0.0) to flag homes if needed
+                if len(flag_homes[Team.BLUE_TEAM]) == 2:
+                    flag_homes[Team.BLUE_TEAM] = np.append(flag_homes[Team.BLUE_TEAM], 0.0)
+                if len(flag_homes[Team.RED_TEAM]) == 2:
+                    flag_homes[Team.RED_TEAM] = np.append(flag_homes[Team.RED_TEAM], 0.0)
             elif self._is_auto_string(flag_homes[Team.BLUE_TEAM]) or self._is_auto_string(flag_homes[Team.RED_TEAM]):
                 raise Exception("Flag homes should be either all 'auto', or all specified")
             else:
@@ -3206,14 +3296,24 @@ when gps environment bounds are specified in meters"
 
             ### scrimmage line ###
             if self._is_auto_string(scrimmage_coords):
-                flags_vec = flag_homes[Team.BLUE_TEAM] - flag_homes[Team.RED_TEAM]
+                # Get 2D vector between flags (ignore z-coordinate)
+                flags_vec = flag_homes[Team.BLUE_TEAM][:2] - flag_homes[Team.RED_TEAM][:2]
 
-                scrim_vec1 = np.array([-flags_vec[1], flags_vec[0]])
-                scrim_vec2 = np.array([flags_vec[1], -flags_vec[0]])
+                # Calculate perpendicular vectors in 2D and append z=0
+                scrim_vec1 = np.array([-flags_vec[1], flags_vec[0], 0.0])
+                scrim_vec2 = np.array([flags_vec[1], -flags_vec[0], 0.0])
                 flags_midpoint = 0.5 * (flag_homes[Team.BLUE_TEAM] + flag_homes[Team.RED_TEAM])
 
+                # Get intersection points with environment boundaries
                 scrimmage_coord1 = self._get_polygon_intersection(flags_midpoint, scrim_vec1, self.env_corners)[1]
                 scrimmage_coord2 = self._get_polygon_intersection(flags_midpoint, scrim_vec2, self.env_corners)[1]
+                
+                # Add z=0 to intersection points if they don't have it
+                if len(scrimmage_coord1) == 2:
+                    scrimmage_coord1 = np.append(scrimmage_coord1, 0.0)
+                if len(scrimmage_coord2) == 2:
+                    scrimmage_coord2 = np.append(scrimmage_coord2, 0.0)
+                    
                 scrimmage_coords = np.asarray([scrimmage_coord1, scrimmage_coord2])
             else:
                 # check and convert units if necessary
@@ -3224,8 +3324,9 @@ when gps environment bounds are specified in meters"
                 elif scrimmage_coords_unit == "wm_xy":
                     pass
                 elif scrimmage_coords_unit == "ll":
-                    scrimmage_coords_1 = mt.xy(*scrimmage_coords[0][-1::-1])
-                    scrimmage_coords_2 = mt.xy(*scrimmage_coords[1][-1::-1])
+                    # Convert lat/lon to web mercator xy and add z=0
+                    scrimmage_coords_1 = np.append(mt.xy(*scrimmage_coords[0][-1::-1]), 0.0)
+                    scrimmage_coords_2 = np.append(mt.xy(*scrimmage_coords[1][-1::-1]), 0.0)
                     scrimmage_coords = np.array([scrimmage_coords_1, scrimmage_coords_2])
                 else:
                     raise Exception(
@@ -3449,14 +3550,24 @@ when gps environment bounds are specified in meters"
 
             ### scrimmage line ###
             if self._is_auto_string(scrimmage_coords):
-                flags_vec = flag_homes[Team.BLUE_TEAM] - flag_homes[Team.RED_TEAM]
+                # Get 2D vector between flags (ignore z-coordinate)
+                flags_vec = flag_homes[Team.BLUE_TEAM][:2] - flag_homes[Team.RED_TEAM][:2]
 
-                scrim_vec1 = np.array([-flags_vec[1], flags_vec[0]])
-                scrim_vec2 = np.array([flags_vec[1], -flags_vec[0]])
+                # Calculate perpendicular vectors in 2D and append z=0
+                scrim_vec1 = np.array([-flags_vec[1], flags_vec[0], 0.0])
+                scrim_vec2 = np.array([flags_vec[1], -flags_vec[0], 0.0])
                 flags_midpoint = 0.5 * (flag_homes[Team.BLUE_TEAM] + flag_homes[Team.RED_TEAM])
 
+                # Get intersection points with environment boundaries
                 scrimmage_coord1 = self._get_polygon_intersection(flags_midpoint, scrim_vec1, self.env_corners)[1]
                 scrimmage_coord2 = self._get_polygon_intersection(flags_midpoint, scrim_vec2, self.env_corners)[1]
+                
+                # Add z=0 to intersection points if they don't have it
+                if len(scrimmage_coord1) == 2:
+                    scrimmage_coord1 = np.append(scrimmage_coord1, 0.0)
+                if len(scrimmage_coord2) == 2:
+                    scrimmage_coord2 = np.append(scrimmage_coord2, 0.0)
+                    
                 scrimmage_coords = np.asarray([scrimmage_coord1, scrimmage_coord2])
             else:
                 if scrimmage_coords_unit == "ll" or scrimmage_coords_unit == "wm_xy":
@@ -4284,7 +4395,16 @@ when gps environment bounds are specified in meters"
         self.render_ctr += 1
 
     def env_to_screen(self, pos):
-        screen_pos = self.pixel_size * np.asarray(pos)
+        """Convert environment coordinates to screen coordinates.
+        For 3D coordinates, projects onto 2D screen by ignoring z-coordinate.
+        """
+        pos_array = np.asarray(pos)
+        # Take only x,y coordinates if position is 3D
+        if len(pos_array.shape) > 1:
+            screen_pos = self.pixel_size * pos_array[:, :2]
+        else:
+            screen_pos = self.pixel_size * pos_array[:2] if len(pos_array) > 2 else self.pixel_size * pos_array
+            
         screen_pos[0] += self.arena_buffer[0][0]
         screen_pos[1] = self.arena_height - screen_pos[1] + self.arena_buffer[1][1]
 
@@ -4361,8 +4481,11 @@ when gps environment bounds are specified in meters"
             self.isopen = False
 
     def _min(self, a, b):
-        """Convenience method for determining a minimum value. The standard `min()` takes much longer to run."""
-        if a < b:
+        """Convenience method for determining a minimum value. The standard `min()` takes much longer to run.
+        Works with both scalar values and numpy arrays."""
+        if isinstance(a, (np.ndarray, list)) and isinstance(b, (np.ndarray, list)):
+            return np.minimum(a, b)
+        elif a < b:
             return a
         else:
             return b
@@ -4373,6 +4496,8 @@ when gps environment bounds are specified in meters"
         logic performed in the superclass state_to_obs, this method adds the distance
         and bearing to obstacles into the observation and then performs the
         normalization.
+
+        For 3D vehicles, this includes z-position and z-velocity in the observations.
 
         Args:
             agent_id: The agent who's observation is being generated
@@ -4387,8 +4512,13 @@ when gps environment bounds are specified in meters"
             for i, obstacle in enumerate(
                 self.state["dist_bearing_to_obstacles"][agent_id]
             ):
+                # For 3D obstacles, distance is Euclidean distance in 3D
                 orig_obs[f"obstacle_{i}_distance"] = obstacle[0]
+                # Bearing remains in 2D plane (xy-plane)
                 orig_obs[f"obstacle_{i}_bearing"] = obstacle[1]
+                # Add vertical angle if needed for 3D obstacles
+                if len(obstacle) > 2:
+                    orig_obs[f"obstacle_{i}_vertical_angle"] = obstacle[2]
 
         if normalize:
             orig_obs = self.agent_obs_normalizer.normalized(orig_obs)
