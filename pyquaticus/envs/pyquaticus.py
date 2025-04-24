@@ -18,7 +18,7 @@
 # work.
 
 # SPDX-License-Identifier: BSD-3-Clause
-
+from .movement_3d import process_3d_movement, update_3d_state
 import colorsys
 import contextily as cx
 import copy
@@ -195,14 +195,13 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                 except:
                     default_action = False
                 if default_action:
-                    #speed, heading = self._discrete_action_to_speed_relheading(
-                    #    action_dict[player.id]
-                    #)
                     speed, heading, vspd = self._discrete_action_to_speed_relheading(
                         action_dict[player.id]
                     )
                     # Scale speed to agent's max speed
                     speed = self.max_speeds[player.id] * speed
+                    # Process vertical speed for 3D vehicles
+                    vspd = process_3d_movement(player, action_dict, self.max_speeds)
                 else:
                     # Make point system the same on both blue and red side
                     if player.team == Team.BLUE_TEAM:
@@ -228,13 +227,16 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
                         speed = 0.0
                     else:
                         speed = self.max_speeds[player.id]
-                    vspd = 0.0 
+                    vspd = 0.0  # No vertical movement for waypoint nav
             else:
                 # if no action provided, stop moving
                 speed, heading, vspd = 0.0, player.heading, 0.0
 
             processed_action_dict[player.id] = np.array([speed, heading, vspd], dtype=np.float32)
 
+        # Update 3D state after processing all actions
+        update_3d_state(self.state, self.players)
+        
         return processed_action_dict
 
     def _discrete_action_to_speed_relheading(self, action):
@@ -260,6 +262,9 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             max_score, min_score = [self.max_score], [0.0]
             max_lidar_label = self.num_lidar_rays * [len(LIDAR_DETECTION_CLASS_MAP) - 1]
             min_lidar_label = self.num_lidar_rays * [0.0]
+            # 3D state variables
+            max_z_pos, min_z_pos = [self.env_height], [0.0]  # Assuming env_height is defined
+            max_z_vel, min_z_vel = [max(self.max_speeds)], [-max(self.max_speeds)]  # Using same max speed as horizontal
 
             agent_obs_normalizer.register("opponent_home_bearing", max_bearing)
             agent_obs_normalizer.register("opponent_home_distance", max_dist, min_dist)
@@ -278,6 +283,9 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             agent_obs_normalizer.register("opponent_score", max_score, min_score)
             agent_obs_normalizer.register("ray_distances", max_dist_lidar, min_dist_lidar)
             agent_obs_normalizer.register("ray_labels", max_lidar_label, min_lidar_label)
+            # Add 3D state variables
+            agent_obs_normalizer.register("z_position", [self.env_size[2]], [0.0])
+            agent_obs_normalizer.register("z_velocity", [self.max_vertical_speed], [-self.max_vertical_speed])
         else:
             max_bearing = [180]
             max_dist = [self.env_diag]
@@ -307,6 +315,9 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             agent_obs_normalizer.register("is_tagged", max_bool, min_bool)
             agent_obs_normalizer.register("team_score", max_score, min_score)
             agent_obs_normalizer.register("opponent_score", max_score, min_score)
+            # Add 3D state variables
+            agent_obs_normalizer.register("z_position", [self.env_size[2]], [0.0])
+            agent_obs_normalizer.register("z_velocity", [self.max_vertical_speed], [-self.max_vertical_speed])
 
             for i in range(num_on_team - 1):
                 teammate_name = f"teammate_{i}"
@@ -357,6 +368,9 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             global_state_normalizer.register((player_name, "on_side"), max_bool, min_bool)
             global_state_normalizer.register((player_name, "oob"), max_bool, min_bool)
             global_state_normalizer.register((player_name, "tagging_cooldown"), [self.tagging_cooldown], [0.0])
+            # Add 3D state variables
+            global_state_normalizer.register((player_name, "z_pos"), [self.env_size[2]], [0.0])
+            global_state_normalizer.register((player_name, "z_vel"), [self.max_vertical_speed], [-self.max_vertical_speed])
             global_state_normalizer.register((player_name, "is_tagged"), max_bool, min_bool)
 
             for i in range(num_obstacles):
@@ -555,6 +569,9 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             obs["tagging_cooldown"] = agent.tagging_cooldown
             # Is tagged
             obs["is_tagged"] = agent.is_tagged
+            # 3D state variables
+            obs["z_position"] = getattr(agent, 'z_pos', 0.0)
+            obs["z_velocity"] = getattr(agent, 'z_vel', 0.0)
 
             # Team score and Opponent score
             obs["team_score"] = self.state["captures"][team_idx]
@@ -649,6 +666,9 @@ class PyQuaticusEnvBase(ParallelEnv, ABC):
             global_state[(player_name, "oob")] = self.state["agent_oob"][i]
             global_state[(player_name, "tagging_cooldown")] = player.tagging_cooldown
             global_state[(player_name, "is_tagged")] = player.is_tagged
+            # Add 3D state variables
+            global_state[(player_name, "z_pos")] = getattr(player, 'z_pos', 0.0)
+            global_state[(player_name, "z_vel")] = getattr(player, 'z_vel', 0.0)
 
             #Obstacle Distance/Bearing
             for i, obstacle in enumerate(
@@ -1062,6 +1082,27 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
 
             # If the player hits a boundary, return them to their original starting position and skip
             # to the next agent.
+            # Update 3D state variables
+            if hasattr(player, 'z_pos') and hasattr(player, 'z_vel'):
+                # Get vertical speed from action_dict
+                vertical_speed = action_dict.get(player.id, [0, 0, 0])[2]
+                
+                # Update z-position and z-velocity using process_3d_movement
+                z_pos, z_vel = process_3d_movement(
+                    player.z_pos,
+                    player.z_vel,
+                    vertical_speed,
+                    dt,
+                    self.max_vertical_speed
+                )
+                
+                # Update player and state
+                player.z_pos = z_pos
+                player.z_vel = z_vel
+                self.state['agent_z_position'][i] = z_pos
+                self.state['agent_z_velocity'][i] = z_vel
+
+            # Check for collisions
             player_hit_obstacle = detect_collision(player.pos, self.agent_radius, self.obstacle_geoms)
 
             if player_hit_obstacle:
@@ -2284,6 +2325,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
                     "prev_agent_position":       copy.deepcopy(agent_positions),
                     "agent_speed":               agent_spd_hdg[:, 0],
                     "agent_heading":             agent_spd_hdg[:, 1],
+                    "agent_z_position":          np.zeros(self.num_agents), # z-position for 3D vehicles
+                    "agent_z_velocity":          np.zeros(self.num_agents), # z-velocity for 3D vehicles
                     "agent_on_sides":            agent_on_sides,
                     "agent_oob":                 np.zeros(self.num_agents, dtype=bool), #if this agent is out of bounds
                     "agent_has_flag":            np.zeros(self.num_agents, dtype=bool),
@@ -2427,6 +2470,8 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             "prev_agent_position":       None, #to be set with init_dict and _generate_agent_starts()
             "agent_speed":               None, #to be set with init_dict and _generate_agent_starts()
             "agent_heading":             None, #to be set with init_dict and _generate_agent_starts()
+            "agent_z_position":          np.zeros(self.num_agents), # z-position for 3D vehicles
+            "agent_z_velocity":          np.zeros(self.num_agents), # z-velocity for 3D vehicles
             "agent_on_sides":            np.zeros(self.num_agents, dtype=bool),
             "agent_oob":                 np.zeros(self.num_agents, dtype=bool), 
             "agent_has_flag":            np.zeros(self.num_agents, dtype=bool),
@@ -2589,6 +2634,11 @@ class PyQuaticusEnv(PyQuaticusEnvBase):
             player.tagging_cooldown = self.state["agent_tagging_cooldown"][i]
             player.is_tagged = self.state["agent_is_tagged"][i]
             player.oob = self.state["agent_oob"][i]
+            
+            # Set 3D state variables if the player supports them
+            if hasattr(player, 'z_pos') and hasattr(player, 'z_vel'):
+                player.z_pos = self.state["agent_z_position"][i]
+                player.z_vel = self.state["agent_z_velocity"][i]
 
     def _set_flag_attributes_from_state(self):
         for flag in self.flags:
