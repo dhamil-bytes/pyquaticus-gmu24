@@ -1,5 +1,5 @@
 from OpenGL.GLUT import glutInit
-from pyopengl.bound import simulate
+from pyopengl.bound import execute_game
 
 def main():
     print("this is a test")
@@ -12,7 +12,7 @@ def main():
         print("GLUT working properly.. proceeding")
     
     print("executing pyopengl sim")
-    simulate()
+    execute_game()
 
 
 if __name__ == "__main__":
