@@ -28,11 +28,20 @@ from pyquaticus.envs.pyquaticus import Team
 
 class BaseAgentPolicy:
     """
+    Base class for agent policies, supporting both 2D and 3D agents.
+    
+    For 3D agents (Drones and UUVs), additional observations include:
+    - z_pos: Vertical position
+    - z_vel: Vertical velocity
+    
+    3D agents can also use vertical movement actions.
+    """
+    """
     Class containing utility routines for agents to calculate useful info using
     the observation space.
     """
 
-    def __init__(self, agent_id: int, team: Team, suppress_numpy_warnings=True):
+    def __init__(self, agent_id: int, team: Team, is_3d_agent=False, suppress_numpy_warnings=True):
         self.id = agent_id
         if isinstance(team, str):
             if team == 'red':
@@ -51,6 +60,15 @@ class BaseAgentPolicy:
             np.seterr(all="ignore")
 
     def compute_action(self, obs):
+        """
+        Compute an action based on the current observation.
+        For 3D agents, this includes vertical movement.
+        
+        Args:
+            obs: Dictionary containing observations including z_pos and z_vel for 3D agents
+        
+        Returns:
+            action: Action index from the action space
         """
         **THIS FUNCTION REQUIRES UNNORMALIZED OBSERVATIONS**.
 

@@ -93,7 +93,38 @@ params{
 import math
 
 def sparse(self, params, prev_params):
+    """Calculate sparse rewards including 3D behavior incentives.
+    
+    New 3D rewards:
+    - Vertical positioning (drones should stay high, UUVs should stay deep)
+    - Strategic 3D movement (using height/depth to avoid obstacles)
+    - 3D collision penalties
+    """
     reward = 0
+    
+    # 3D-specific rewards
+    if hasattr(params, 'vehicle_type') and params.vehicle_type in ['Drone', 'UUV']:
+        # Get vertical position
+        z_pos = params.get('z_pos', 0)
+        
+        # Vertical positioning rewards
+        if params.vehicle_type == 'Drone':
+            # Encourage drones to maintain altitude
+            if z_pos < params.get('min_safe_height', 5.0):
+                reward -= 25  # Penalty for flying too low
+        elif params.vehicle_type == 'UUV':
+            # Encourage UUVs to stay underwater
+            if z_pos > params.get('max_safe_depth', -2.0):
+                reward -= 25  # Penalty for surfacing
+        
+        # Reward for using 3D movement to avoid obstacles
+        if params.get('avoided_obstacle_3d', False):
+            reward += 15
+        
+        # Extra penalty for 3D collisions
+        if params.get('collision_3d', False):
+            reward -= 50
+    
     # Penalize player for opponent grabbing team flag
     if params["opponent_flag_pickup"] and not prev_params["opponent_flag_pickup"]:
         reward += -50

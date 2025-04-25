@@ -22,13 +22,31 @@
 from ray.rllib.env.wrappers.pettingzoo_env import ParallelPettingZooEnv as RLlibParallelPettingZooEnv
 from typing import Optional
 
+from pyquaticus.dynamics.dynamics import Drone, UUV
+
 
 class ParallelPettingZooWrapper(RLlibParallelPettingZooEnv):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        # Track which agents are 3D-capable
+        self.is_3d_agent = {}
+        for agent_id in self.env.possible_agents:
+            agent = self.env.agents[agent_id]
+            self.is_3d_agent[agent_id] = isinstance(agent, (Drone, UUV))
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[dict] = None):
-        # pass empty info just to align with RLlib code
+        # Initialize 3D positions for Drones and UUVs
+        obs, info = self.env.reset(seed=seed, options=options)
+        
+        # Update observation spaces for 3D agents
+        for agent_id in self.env.agents:
+            if self.is_3d_agent[agent_id]:
+                obs[agent_id].update({
+                    'z_pos': 0.0,  # Initial z position
+                    'z_vel': 0.0   # Initial z velocity
+                })
+        
+        return obs, info
         info = {}
         return self.par_env.reset(seed=seed, options=options), info
 
