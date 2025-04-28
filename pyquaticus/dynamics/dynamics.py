@@ -541,8 +541,7 @@ class Drone(Dynamics):
             "x_vel": 0,
             "y_vel": 0,
             "z_vel": 0,
-            "z_pos": 0,
-            "target_z": 0
+            "z_pos": 0
         }
         self.state.update(new_state)
 
@@ -571,7 +570,6 @@ class Drone(Dynamics):
             "y_vel": 0,
             "z_vel": 0,
             "z_pos": self.state["z_pos"],  # Keep current z position
-            "target_z": self.state["target_z"]  # Keep target z position
         }
         self.state.update(new_state)
 
@@ -722,8 +720,7 @@ class UUV(Dynamics):
             "x_vel": 0,
             "y_vel": 0,
             "z_vel": 0,
-            "z_pos": 0,
-            "target_z": 0
+            "z_pos": 0
         }
         self.state.update(new_state)
 
@@ -746,7 +743,6 @@ class UUV(Dynamics):
             "y_vel": 0,
             "z_vel": 0,
             "z_pos": self.state["z_pos"],  # Keep current z position
-            "target_z": self.state["target_z"]  # Keep target z position
         }
         self.state.update(new_state)
 
