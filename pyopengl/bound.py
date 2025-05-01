@@ -146,6 +146,10 @@ class Game:
             self.environment.drone1.move_forward()
         if keys[pygame.K_s]:
             self.environment.drone1.move_backward()
+        if keys[pygame.K_q]:
+            self.environment.drone1.move_upward()
+        if keys[pygame.K_e]:
+            self.environment.drone1.move_downward()
         if keys[pygame.K_a]:
             self.environment.drone1.rotate_left()
         if keys[pygame.K_d]:
@@ -156,10 +160,15 @@ class Game:
             self.environment.drone2.move_forward()
         if keys[pygame.K_DOWN]:
             self.environment.drone2.move_backward()
+        if keys[pygame.K_RSHIFT]:
+            self.environment.drone2.move_upward()
+        if keys[pygame.K_RCTRL]:
+            self.environment.drone2.move_downward()
         if keys[pygame.K_LEFT]:
             self.environment.drone2.rotate_left()
         if keys[pygame.K_RIGHT]:
             self.environment.drone2.rotate_right()
+        
 
     def draw_button(self):
         # Save OpenGL state

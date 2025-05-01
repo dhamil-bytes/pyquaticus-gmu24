@@ -66,7 +66,31 @@ class Drone(GameObject):
                 not self.check_rectangle_collision(new_x, new_z)):
                 self.position[0] = new_x
                 self.position[2] = new_z
+    
+    def move_upward(self):
+        # calculate new position
+        new_y = self.position[1] + self.speed
         
+        if self.environment:
+            half_height = self.environment.height / 2
+            
+            # Only update if within bounds and not colliding
+            if (-half_height < new_y < half_height and 
+                not self.check_rectangle_collision(self.position[0], new_y)):
+                self.position[1] = new_y
+
+    def move_downward(self):
+        # calculate new position
+        new_y = self.position[1] - self.speed
+        
+        if self.environment:
+            half_height = self.environment.height / 2
+            
+            # Only update if within bounds and not colliding
+            if (-half_height < new_y < half_height and 
+                not self.check_rectangle_collision(self.position[0], new_y)):
+                self.position[1] = new_y
+
     def rotate_left(self):
         # Rotate counterclockwise around Y axis
         self.rotation[1] += self.rotation_speed
