@@ -16,7 +16,7 @@ config_dict_std = {
 
     # Geometry parameters
     "gps_env":             False,  # option to use a real world location for the game
-    "env_bounds":  [160.0, 80.0],  # meters [xmax, ymax]
+    "env_bounds":  [160.0, 80.0, 50.0],  # meters [xmax, ymax] and z_max
     "env_bounds_unit":       "m",  # "m" (meters), "wm_xy" (web mercator xy), "ll" (lat/lon)
     "z_bounds":      [-20.0, 30.0],  # meters [zmin, zmax] for 3D movement, negative is underwater
     "blue_flag_home":     "auto",  # coordinates (lat, lon), list of coordinates, or "auto"
@@ -176,6 +176,7 @@ ACTION_MAP.append([1.0, 0.0, 1.0])  # Up fast
 ACTION_MAP.append([1.0, 0.0, -1.0])  # Down fast
 # add a none action
 ACTION_MAP.append([0.0, 0.0, 0.0])
+
 
 # ACTION MAP: (Need Update to include up and)
 # [[1.0,  180], [1.0,  135], [1.0,  90], 
