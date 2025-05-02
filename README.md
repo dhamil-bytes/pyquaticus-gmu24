@@ -60,7 +60,7 @@ pip install -e .[torch,ray]
 
 ## Environment Visuals
 
-* Rendered with `pygame` and 'PyOpenGL'
+* Rendered with `pygame` and `PyOpenGL`
 * Blue vs Red 1v1
 * **Flag keepout zone:** circle (team's color) drawn around flag
 * **Flag pickup zone:** collide with flag
