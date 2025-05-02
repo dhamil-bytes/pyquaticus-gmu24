@@ -33,7 +33,7 @@ class Drone(GameObject):
         return (rect_x - rect_half_width - buffer <= new_x <= rect_x + rect_half_width + buffer and
                 rect_z - rect_half_depth - buffer <= new_z <= rect_z + rect_half_depth + buffer)
     
-     def check_flag_collision(self, flag):
+    def check_flag_collision(self, flag):
         # Don't check if we already have a flag or if it's the same color as the drone
         if self.captured_flag or \
            (self.is_blue and flag.color[2] > flag.color[0]) or \
