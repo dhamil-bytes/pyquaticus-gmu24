@@ -55,24 +55,16 @@ pip install -e .[torch,ray]
 
 ## Basic Tests
 
-* Random action: `python ./test/rand_env_test.py`
-* Control with arrow keys: `python ./test/arrowkeys_test.py`
-  * control agents with WASD and the arrow keys
+* Control with arrow keys: `python ./test/pyopengl_arrowkeys_test.py`
+  * control agents with WASDQE and the arrow keys + RSHIFT + RCTRL
 
 ## Environment Visuals
 
-* Rendered with `pygame`
-* Blue vs Red 1v1 or multiagent teams
+* Rendered with `pygame` and 'PyOpenGL'
+* Blue vs Red 1v1
 * **Flag keepout zone:** circle (team's color) drawn around flag
-* **Flag pickup zone:** black circle drawn around flag
-* **Tagging cooldown**: receding black circle around agent
-* **Out-of-bounds**: yellow halo around agent (occurs if out-of-bounds)
-* **Drive-to-home**: green halo around agent (occurs if tagged)
-* **Lines between agents:**
-  * Drawn between agents of opposite teams
-  * **Green**: within `2*catch_radius`
-  * **Orange/Yellow**: within `1.5*catch_radius`
-  * **Red**: within `catch_radius`
+* **Flag pickup zone:** collide with flag
+* **Out-of-bounds**: boundary walls halt movement
 
 ## Configurable Reward
 
