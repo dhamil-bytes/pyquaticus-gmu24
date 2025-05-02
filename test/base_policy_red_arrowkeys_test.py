@@ -22,16 +22,17 @@
 import argparse
 import gymnasium as gym
 import pygame
-from pygame import KEYDOWN, QUIT, K_ESCAPE
 import sys
-from pyquaticus.config import get_std_config, ACTION_MAP
+import time
+
+from collections import OrderedDict
+from pygame import KEYDOWN, QUIT, K_ESCAPE, K_LEFT, K_UP, K_RIGHT
+from pyquaticus.config import ACTION_MAP
 from pyquaticus.envs.pyquaticus import Team
 from pyquaticus.base_policies.base_combined import Heuristic_CTF_Agent
 from pyquaticus.base_policies.base_attack import BaseAttacker
 from pyquaticus.base_policies.base_defend import BaseDefender
 from pyquaticus import pyquaticus_v0
-from pygame import QUIT, KEYDOWN, K_ESCAPE, K_LEFT, K_UP, K_RIGHT
-from collections import OrderedDict
 
 RENDER_MODE = 'human'
 
@@ -42,17 +43,20 @@ class KeyTest:
     def __init__(self, env, quittable=True):
         '''
         Args:
-            env:        the pyquaticus environment
-            red_policy: if set to None, then red doesn't move unless controlled
-                        if passed a policy, then controls the red team with the policy
+            env: the pyquaticus environment
         '''
-        reset_opts = {'normalize': False}
-        self.obs = env.reset(options=reset_opts)
+        self.obs, self.info = env.reset(return_info=True)
         self.env = env
-        
-        self.blue_policy = BaseDefender(env.players[1].id, env.players[1].team, mode='competition_easy')
-        
+        self.red_policy = BaseAttacker(
+            env.agents_of_team[Team.RED_TEAM][0].id,
+            Team.RED_TEAM,
+            env,
+            mode='competition_medium',
+            continuous=True
+        )
+
         self.quittable = quittable
+
         self.no_op_action = 16
         straight = 4
         left = 6
@@ -60,7 +64,7 @@ class KeyTest:
         straightleft = 5
         straightright = 3
 
-        self.red_keys_to_action={0              : self.no_op_action,
+        self.blue_keys_to_action={0              : self.no_op_action,
                                  K_UP           : straight,
                                  K_LEFT         : left,
                                  K_RIGHT        : right,
@@ -68,18 +72,19 @@ class KeyTest:
                                  K_UP + K_RIGHT : straightright
                                 }
 
-        self.blue_agent_id = self.env.agents_of_team[Team.RED_TEAM][0].id
-        self.red_agent_id  = self.env.agents_of_team[Team.BLUE_TEAM][0].id
+        self.blue_agent_id = env.agents_of_team[Team.BLUE_TEAM][0].id
+        self.red_agent_id  = env.agents_of_team[Team.RED_TEAM][0].id
+
 
     def begin(self):
         while True:
             action_dict = self.process_event(self.quittable)
             
-            self.obs, rewards, terminated, truncated, info = self.env.step(action_dict)
-            # time.sleep(1.)
+            self.obs, rewards, terminated, truncated, self.info = self.env.step(action_dict)
             for k in terminated:
                 if terminated[k] == True or truncated[k]==True:
-                    self.env.reset()
+                    time.sleep(1.)
+                    self.obs, self.info = self.env.reset(return_info=True)
                     break
 
     def process_event(self, quittable):
@@ -92,22 +97,22 @@ class KeyTest:
 
         action_dict = OrderedDict([(player_id, self.no_op_action) for player_id in self.env.players])
         is_key_pressed = pygame.key.get_pressed()
-
-        # blue policy
-        blue_action = self.blue_policy.compute_action(self.obs)
-        action_dict[self.blue_agent_id] = blue_action
-
-        # red keys
-        red_keys = K_RIGHT*is_key_pressed[K_RIGHT] + K_LEFT*is_key_pressed[K_LEFT]*(is_key_pressed[K_LEFT] - is_key_pressed[K_RIGHT]) + K_UP*is_key_pressed[K_UP]
-        red_action = self.red_keys_to_action[red_keys]
+        
+        # red policy
+        red_action = self.red_policy.compute_action(self.obs, self.info)
         action_dict[self.red_agent_id] = red_action
+        
+        # blue keys
+        blue_keys = K_RIGHT*is_key_pressed[K_RIGHT] + K_LEFT*is_key_pressed[K_LEFT]*(is_key_pressed[K_LEFT] - is_key_pressed[K_RIGHT]) + K_UP*is_key_pressed[K_UP]
+        blue_action = self.blue_keys_to_action[blue_keys]
+        action_dict[self.blue_agent_id] = blue_action
         return action_dict
     
 if __name__ == '__main__':
-    config_dict = get_std_config()
-    config_dict['normalize'] = False
+    config = {}
+    config['sim_speedup_factor'] = 16
 
     #PyQuaticusEnv is a Parallel Petting Zoo Environment
-    env = pyquaticus_v0.PyQuaticusEnv(render_mode='human', team_size=1)
+    env = pyquaticus_v0.PyQuaticusEnv(render_mode='human', team_size=1, config_dict=config)
     kt = KeyTest(env)
     kt.begin()
