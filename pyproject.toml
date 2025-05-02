@@ -58,7 +58,9 @@ dependencies = [
 	"scipy==1.14.1",
 	"shapely==2.0.6",
 	"sympy==1.13.1",
-	"pymoos==2022.1; sys_platform == 'linux' or sys_platform == 'darwin'"
+	"pymoos==2022.1; sys_platform == 'linux' or sys_platform == 'darwin'",
+	"PyOpenGL==3.1.6",
+	"PyOpenGL_accelerate==3.1.6"
 ]
 
 [project.optional-dependencies]
@@ -66,7 +68,7 @@ torch = ["torch==2.6.0", "tensorflow-probability==0.19.0"]
 ray = ["ray[rllib]==2.41.0"]
 
 [tool.setuptools.packages.find]
-include = ["pyquaticus"]
+include = ["pyquaticus", "pyopengl", "pyopengl.components", "pyopengl.utils"]
 namespaces = false
 
 [tool.setuptools_scm]
