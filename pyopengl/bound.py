@@ -60,6 +60,8 @@ class Game:
         self.environment.set_drone_objects(drone1, drone2)
         self.environment.set_flag_objects(flag1, flag2, base1, base2)
         self.environment.set_obstacle()
+        # setting/saving starting positions
+        self.environment.set_initial_pos()
                 
         print("Environment created with dimensions:", self.environment.width, self.environment.height, self.environment.depth)
         print("Drone 1 position:", self.environment.drone1.position)
@@ -109,7 +111,7 @@ class Game:
 
                     if self.res_button_rect.collidepoint(mouse_pos):
                         # reset environment
-                        self.environment.update_drone_pos(reset=True)
+                        self.environment.reset_game()
                                           
                 elif event.type == pygame.MOUSEMOTION:
                     mouse_pos = pygame.mouse.get_pos()

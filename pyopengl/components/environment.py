@@ -65,8 +65,7 @@ class Environment(GameObject):
         
         # Make drones face each other
         self.drone1.rotation = [0, 90, 0]   # Face right
-        self.drone2.rotation = [0, -90, 0]  # Face left
-        
+        self.drone2.rotation = [0, -90, 0]  # Face left        
     
     def set_flag_objects(self, flag1, flag2, base1, base2):
         # setting base
@@ -81,9 +80,7 @@ class Environment(GameObject):
         self.flag2 = flag2
         # Position flags on their bases
         self.flag1.position = [-15, 0, 0]   # On base1
-        self.flag2.position = [15, 0, 0]    # On base2
-        
-        
+        self.flag2.position = [15, 0, 0]    # On base2        
 
     # includes divider wall
     def set_obstacle(self):
@@ -100,22 +97,52 @@ class Environment(GameObject):
         self.rectangle = Rectangle()
         self.rectangle.position = [0, 0, 0]  # Center on floor
         self.rectangle.rotation = [0, 75, 0]  # Rotate 30 degrees left around Y axis
+    
+    def set_initial_pos(self):
+        # Store initial positions and rotations
+        self.initial_positions = {
+            'drone1': {'pos': [-10, 0, 0], 'rot': [0, 90, 0]},   # Left center, face right
+            'drone2': {'pos': [10, 0, 0], 'rot': [0, -90, 0]},    # Right center, face left
+            'flag1': {'pos': [-15, 0, 0]},  # On base1
+            'flag2': {'pos': [15, 0, 0]},   # On base2
+            'base1': {'pos': [-15, 0, 0]},  # Left side
+            'base2': {'pos': [15, 0, 0]}    # Right side
+        }
+        
+        # Set home positions for flags (this is where they'll return to)
+        self.flag1.set_home_position(self.initial_positions['flag1']['pos'])
+        self.flag2.set_home_position(self.initial_positions['flag2']['pos'])
+        
+        # Initialize positions
+        self.reset_game()
 
-    def update_drone_pos(self, reset=False, drone1=True, drone2=True, pos1=[-10,0,0], pos2=[10,0,0]):          
-        # do something
-        if reset:
-            # Position drones in the middle
-            self.drone1.position = [-10,0,0]  # Left center
-            self.drone2.position = [10,0,0]   # Right center
-            
-            # Make drones face each other
-            self.drone1.rotation = [0, 90, 0]   # Face right
-            self.drone2.rotation = [0, -90, 0]  # Face left
-        else:
+
+    # FUTURE FUNCTION
+    def update_drone_pos(self, drone1=True, drone2=True, pos1=[-10,0,0], pos2=[10,0,0]):
             if drone1:
                 self.drone1.position = pos1
             if drone2:
                 self.drone2.position = pos2
+        
+    def reset_game(self):
+        """Reset all game objects to their initial positions"""
+        # Reset drone positions and rotations
+        self.drone1.position = self.initial_positions['drone1']['pos'].copy()
+        self.drone1.rotation = self.initial_positions['drone1']['rot'].copy()
+        self.drone2.position = self.initial_positions['drone2']['pos'].copy()
+        self.drone2.rotation = self.initial_positions['drone2']['rot'].copy()
+        
+        # Reset flag positions
+        self.flag1.position = self.initial_positions['flag1']['pos'].copy()
+        self.flag2.position = self.initial_positions['flag2']['pos'].copy()
+        
+        # Reset base positions
+        self.base1.position = self.initial_positions['base1']['pos'].copy()
+        self.base2.position = self.initial_positions['base2']['pos'].copy()
+        
+        # Clear captured flags
+        self.drone1.captured_flag = None
+        self.drone2.captured_flag = None
     
     def draw(self):
         # Save the current matrix and apply base transformations
