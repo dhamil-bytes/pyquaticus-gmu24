@@ -11,6 +11,8 @@ class Drone(GameObject):
         self.speed = 0.3  # Slower speed for more precise movement
         self.rotation_speed = 3.0  # Degrees per frame
         self.environment = None  # Will be set by Environment class
+        self.captured_flag = None  # Reference to the captured flag
+        self.is_blue = color[2] > color[0]  # True if drone is blue, False if red  
         
     def check_rectangle_collision(self, new_x, new_z):
         if not self.environment or not self.environment.rectangle.visible:
@@ -31,6 +33,38 @@ class Drone(GameObject):
         return (rect_x - rect_half_width - buffer <= new_x <= rect_x + rect_half_width + buffer and
                 rect_z - rect_half_depth - buffer <= new_z <= rect_z + rect_half_depth + buffer)
     
+     def check_flag_collision(self, flag):
+        # Don't check if we already have a flag or if it's the same color as the drone
+        if self.captured_flag or \
+           (self.is_blue and flag.color[2] > flag.color[0]) or \
+           (not self.is_blue and flag.color[0] > flag.color[2]):
+            return False
+            
+        # Calculate distance between drone's nose and flag
+        angle_rad = math.radians(self.rotation[1])
+        nose_x = self.position[0] + math.sin(angle_rad) * self.size
+        nose_z = self.position[2] + math.cos(angle_rad) * self.size
+        
+        dx = nose_x - flag.position[0]
+        dy = self.position[1] - flag.position[1]
+        dz = nose_z - flag.position[2]
+        
+        # Check if within capture radius
+        capture_radius = 3.0  # Increased from 1.0 to make capture easier
+        return (dx * dx + dy * dy + dz * dz) <= capture_radius * capture_radius
+        
+    def update_captured_flag_position(self):
+        if self.captured_flag:
+            # Calculate nose position
+            angle_rad = math.radians(self.rotation[1])
+            nose_x = self.position[0] + math.sin(angle_rad) * self.size
+            nose_z = self.position[2] + math.cos(angle_rad) * self.size
+            
+            # Update flag position to match nose
+            self.captured_flag.position[0] = nose_x
+            self.captured_flag.position[1] = self.position[1]
+            self.captured_flag.position[2] = nose_z
+  
     def move_forward(self):
         # Calculate new position
         angle_rad = math.radians(self.rotation[1])
@@ -48,7 +82,17 @@ class Drone(GameObject):
                 not self.check_rectangle_collision(new_x, new_z)):
                 self.position[0] = new_x
                 self.position[2] = new_z
-        
+                            
+            # Check for flag collision
+            if not self.captured_flag:
+                for flag in [self.environment.flag1, self.environment.flag2]:
+                    if self.check_flag_collision(flag):
+                        self.captured_flag = flag
+                        break
+                            
+            # Update captured flag position
+            self.update_captured_flag_position()
+  
     def move_backward(self):
         # Calculate new position
         angle_rad = math.radians(self.rotation[1])
@@ -66,7 +110,17 @@ class Drone(GameObject):
                 not self.check_rectangle_collision(new_x, new_z)):
                 self.position[0] = new_x
                 self.position[2] = new_z
-    
+            
+            # Check for flag collision
+            if not self.captured_flag:
+                for flag in [self.environment.flag1, self.environment.flag2]:
+                    if self.check_flag_collision(flag):
+                        self.captured_flag = flag
+                        break
+                            
+            # Update captured flag position
+            self.update_captured_flag_position()
+
     def move_upward(self):
         # calculate new position
         new_y = self.position[1] + self.speed
@@ -78,6 +132,7 @@ class Drone(GameObject):
             if (-half_height < new_y < half_height and 
                 not self.check_rectangle_collision(self.position[0], new_y)):
                 self.position[1] = new_y
+                self.update_captured_flag_position()
 
     def move_downward(self):
         # calculate new position
@@ -90,18 +145,21 @@ class Drone(GameObject):
             if (-half_height < new_y < half_height and 
                 not self.check_rectangle_collision(self.position[0], new_y)):
                 self.position[1] = new_y
-
+                self.update_captured_flag_position()
+  
     def rotate_left(self):
         # Rotate counterclockwise around Y axis
         self.rotation[1] += self.rotation_speed
         if self.rotation[1] >= 360:
             self.rotation[1] -= 360
+        self.update_captured_flag_position()
         
     def rotate_right(self):
         # Rotate clockwise around Y axis
         self.rotation[1] -= self.rotation_speed
         if self.rotation[1] < 0:
             self.rotation[1] += 360
+        self.update_captured_flag_position()
         
     def draw(self):
         # Set color directly for solid color without lighting effects
