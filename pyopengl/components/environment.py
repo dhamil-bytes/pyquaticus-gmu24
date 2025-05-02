@@ -5,8 +5,10 @@ from .game_object import GameObject
 from .drone import Drone
 from .home_base import HomeBase
 from .flag import Flag
-from .divider_wall import DividerWall
+from .divider_wall import DividerWall, Equator
 from .rectangle import Rectangle
+
+from typing import List
 
 class Environment(GameObject):
     def __init__(self, width=20, height=10, depth=20):
@@ -48,41 +50,72 @@ class Environment(GameObject):
                 
                 self.last_mouse_pos = current_pos
         
-    def set_game_objects(self, drone1, drone2, base1, base2, flag1, flag2):
+    def set_drone_objects(self, drone1, drone2, pos1=[-10, 0, 0], pos2=[10, 0, 0]):
         # Store references to game objects
         self.drone1 = drone1
         self.drone2 = drone2
-        self.base1 = base1
-        self.base2 = base2
-        self.flag1 = flag1
-        self.flag2 = flag2
-        self.divider_wall = DividerWall(height=self.height, depth=self.depth)
-        self.rectangle = Rectangle()
-        self.rectangle.position = [0, -3, 0]  # Center the rectangle
         
         # Set environment reference in drones for boundary checking
         self.drone1.environment = self
         self.drone2.environment = self
         
-        # Position bases on the floor
-        self.base1.position = [-15, -5, 0]   # Left front
-        self.base2.position = [15, -5, 0]    # Right front
-        
-        # Position flags on their bases
-        self.flag1.position = [-15, -5, 0]   # On base1
-        self.flag2.position = [15, -5, 0]    # On base2
-        
         # Position drones in the middle
-        self.drone1.position = [-10, -3, 0]  # Left center
-        self.drone2.position = [10, -3, 0]   # Right center
+        self.drone1.position = pos1  # Left center
+        self.drone2.position = pos2   # Right center
         
         # Make drones face each other
         self.drone1.rotation = [0, 90, 0]   # Face right
         self.drone2.rotation = [0, -90, 0]  # Face left
         
+    
+    def set_flag_objects(self, flag1, flag2, base1, base2):
+        # setting base
+        self.base1 = base1
+        self.base2 = base2
+        # Position bases on the floor
+        self.base1.position = [-15, 0, 0]   # Left front
+        self.base2.position = [15, 0, 0]    # Right front
+        
+        # setting flags
+        self.flag1 = flag1
+        self.flag2 = flag2
+        # Position flags on their bases
+        self.flag1.position = [-15, 0, 0]   # On base1
+        self.flag2.position = [15, 0, 0]    # On base2
+        
+        
+
+    # includes divider wall
+    def set_obstacle(self):
+        # divider wall
+        self.divider_wall = DividerWall(height=self.height, depth=self.depth)
+        self.divider_wall.position = [0,0-(self.height/2),0]
+
+        # equator
+        self.equater_wall = Equator(width=self.width, depth=self.depth)
+        self.equater_wall.position = [0,0,0]
+
+
         # Position rectangle in the middle and rotate it
-        self.rectangle.position = [0, -2, 0]  # Center on floor
+        self.rectangle = Rectangle()
+        self.rectangle.position = [0, 0, 0]  # Center on floor
         self.rectangle.rotation = [0, 75, 0]  # Rotate 30 degrees left around Y axis
+
+    def update_drone_pos(self, reset=False, drone1=True, drone2=True, pos1=[-10,0,0], pos2=[10,0,0]):          
+        # do something
+        if reset:
+            # Position drones in the middle
+            self.drone1.position = [-10,0,0]  # Left center
+            self.drone2.position = [10,0,0]   # Right center
+            
+            # Make drones face each other
+            self.drone1.rotation = [0, 90, 0]   # Face right
+            self.drone2.rotation = [0, -90, 0]  # Face left
+        else:
+            if drone1:
+                self.drone1.position = pos1
+            if drone2:
+                self.drone2.position = pos2
     
     def draw(self):
         # Save the current matrix and apply base transformations
@@ -165,6 +198,8 @@ class Environment(GameObject):
             
         # Draw divider wall
         self.divider_wall.draw()
+        
+        self.equater_wall.draw()
         
         # Draw rhombus
         if self.rectangle.visible:

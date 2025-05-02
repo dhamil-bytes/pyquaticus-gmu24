@@ -3,16 +3,25 @@ from pygame.locals import *
 from OpenGL.GL import *
 from OpenGL.GLU import *
 from .components.environment import Environment
-from .components.drone import Drone
+from .components.drone import Drone, UAV, UUV
 from .components.home_base import HomeBase
 from .components.flag import Flag
 
 from .utils.camera import Camera
 from .utils.mouse_handler import MouseHandler
 
+from typing import Optional, Dict, Any
+
 class Game:
-    def __init__(self):
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
         pygame.init()
+        
+        # apply config (initializied before game)
+        if config:
+            dos=1
+        
+        
+        # else:
         self.screen_width = 800
         self.screen_height = 600
         pygame.display.set_mode((self.screen_width, self.screen_height), DOUBLEBUF | OPENGL)
@@ -24,27 +33,34 @@ class Game:
         # Create toggle button
         self.button_rect = pygame.Rect(10, self.screen_height - 40, 100, 30)  # x, y, width, height
         self.button_color = (100, 100, 100)  # Gray color
-        self.button_hover_color = (255, 20, 147) # color for when hover on button
         self.button_hover = False
+        
+        # Create env reset button
+        self.res_button_rect = pygame.Rect(110, self.screen_height - 40, 100, 30)  # x, y, width, height
+        self.res_button_color = (100, 100, 100)  # Gray color
+        self.res_button_hover = False
         
         self.setup_gl()
         
         # Create game objects
-        self.environment = Environment(36, 10, 18)  # Adjusted container dimensions
+        # Environment(width, height, depth)
+        self.environment = Environment(36, 24, 18)  # Adjusted container dimensions
         self.camera = Camera()
         self.camera.position = [0.0, 5.0, 30.0]  # Set initial camera position
         
         # Create game objects
-        drone1 = Drone(color=(1.0, 0.0, 0.0), size=0.5)  # Red drone
-        drone2 = Drone(color=(0.0, 0.0, 1.0), size=0.5)  # Blue drone
+        drone1 = UAV(color=(1.0, 0.0, 0.0), size=0.5)  # Red drone
+        drone2 = UUV(color=(0.0, 0.0, 1.0), size=0.5)  # Blue drone
         base1 = HomeBase(color=(1.0, 0.0, 0.0), size=2)  # Red base
         base2 = HomeBase(color=(0.0, 0.0, 1.0), size=2)  # Blue base
         flag1 = Flag(color=(1.0, 0.0, 0.0), size=0.5)  # Red flag
         flag2 = Flag(color=(0.0, 0.0, 1.0), size=0.5)  # Blue flag
-        
-        # Set up all game objects in environment
-        self.environment.set_game_objects(drone1, drone2, base1, base2, flag1, flag2)
-        
+
+        # Set up all game objects in environment        
+        self.environment.set_drone_objects(drone1, drone2)
+        self.environment.set_flag_objects(flag1, flag2, base1, base2)
+        self.environment.set_obstacle()
+                
         print("Environment created with dimensions:", self.environment.width, self.environment.height, self.environment.depth)
         print("Drone 1 position:", self.environment.drone1.position)
         print("Drone 2 position:", self.environment.drone2.position)
@@ -90,9 +106,15 @@ class Game:
                     mouse_pos = pygame.mouse.get_pos()
                     if self.button_rect.collidepoint(mouse_pos):
                         self.environment.rectangle.toggle()
+
+                    if self.res_button_rect.collidepoint(mouse_pos):
+                        # reset environment
+                        self.environment.update_drone_pos(reset=True)
+                                          
                 elif event.type == pygame.MOUSEMOTION:
                     mouse_pos = pygame.mouse.get_pos()
                     self.button_hover = self.button_rect.collidepoint(mouse_pos)
+                    self.res_button_hover = self.res_button_rect.collidepoint(mouse_pos)
                 
                 # Then pass to environment for rotation
                 self.environment.handle_mouse(event)
@@ -187,6 +209,7 @@ class Game:
         
         # Draw button background
         button_color = (255, 20, 147) if self.button_hover else self.button_color
+        res_button_color = (255, 20, 147) if self.res_button_hover else self.res_button_color
         
         # Convert button rect to raw OpenGL commands for guaranteed visibility
         glBegin(GL_QUADS)
@@ -197,6 +220,15 @@ class Game:
         glVertex2f(self.button_rect.left, self.button_rect.bottom)
         glEnd()
         
+        # converting reset button to raw opengl commands
+        glBegin(GL_QUADS)
+        glColor3f(res_button_color[0]/255.0, res_button_color[1]/255.0, res_button_color[2]/255.0)
+        glVertex2f(self.res_button_rect.left, self.res_button_rect.top)
+        glVertex2f(self.res_button_rect.right, self.res_button_rect.top)
+        glVertex2f(self.res_button_rect.right, self.res_button_rect.bottom)
+        glVertex2f(self.res_button_rect.left, self.res_button_rect.bottom)
+        glEnd()
+        
         # Draw button outline
         glColor3f(0, 0, 0)  # Black
         glBegin(GL_LINE_LOOP)
@@ -204,6 +236,16 @@ class Game:
         glVertex2f(self.button_rect.right, self.button_rect.top)
         glVertex2f(self.button_rect.right, self.button_rect.bottom)
         glVertex2f(self.button_rect.left, self.button_rect.bottom)
+        glEnd()
+        
+        
+        # draw reset button outline
+        glColor3f(0, 0, 0)  # Black
+        glBegin(GL_LINE_LOOP)
+        glVertex2f(self.res_button_rect.left, self.res_button_rect.top)
+        glVertex2f(self.res_button_rect.right, self.res_button_rect.top)
+        glVertex2f(self.res_button_rect.right, self.res_button_rect.bottom)
+        glVertex2f(self.res_button_rect.left, self.res_button_rect.bottom)
         glEnd()
         
         # Draw text using pygame's surface
