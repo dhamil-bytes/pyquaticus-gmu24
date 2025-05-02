@@ -32,7 +32,53 @@ class Drone(GameObject):
         # the rectangle's bounds (plus buffer), prevent movement
         return (rect_x - rect_half_width - buffer <= new_x <= rect_x + rect_half_width + buffer and
                 rect_z - rect_half_depth - buffer <= new_z <= rect_z + rect_half_depth + buffer)
-    
+                   
+    def check_divider_wall_collision(self, new_x):
+        if not self.environment or not self.captured_flag:
+            return False
+            
+        # Get wall position and dimensions
+        wall = self.environment.divider_wall
+        wall_x = wall.position[0]
+        wall_thickness = wall.thickness
+        
+        # Add a small buffer around the wall
+        buffer = 0.2
+        
+        # Check if drone would cross the wall
+        current_x = self.position[0]
+        if (current_x < wall_x and new_x > wall_x) or (current_x > wall_x and new_x < wall_x):
+            # If crossing and carrying flag, trigger reset
+            self.environment.reset_game()
+            return True
+            
+        return False
+        
+    def check_drone_collision(self, new_x, new_y, new_z):
+        if not self.environment:
+            return False
+            
+        # Get the other drone
+        other_drone = self.environment.drone2 if self == self.environment.drone1 else self.environment.drone1
+        
+        # Calculate distance between drones
+        dx = new_x - other_drone.position[0]
+        dy = new_y - other_drone.position[1]
+        dz = new_z - other_drone.position[2]
+        
+        # Check if within collision radius (increased for better detection)
+        collision_radius = 2.0  # Increased from 1.0 to 2.0
+        distance_squared = dx * dx + dy * dy + dz * dz
+        if distance_squared <= collision_radius * collision_radius:
+            # If other drone has a flag, return it to base
+            if other_drone.captured_flag:
+                # Reset flag to its home position
+                other_drone.captured_flag.reset_position()
+                other_drone.captured_flag = None
+            return True
+            
+        return False
+                
     def check_flag_collision(self, flag):
         # Don't check if we already have a flag or if it's the same color as the drone
         if self.captured_flag or \
@@ -55,16 +101,27 @@ class Drone(GameObject):
         
     def update_captured_flag_position(self):
         if self.captured_flag:
-            # Calculate nose position
+            # Update flag position relative to drone's nose
             angle_rad = math.radians(self.rotation[1])
-            nose_x = self.position[0] + math.sin(angle_rad) * self.size
-            nose_z = self.position[2] + math.cos(angle_rad) * self.size
+            offset = 1.0  # Distance in front of drone
             
-            # Update flag position to match nose
-            self.captured_flag.position[0] = nose_x
-            self.captured_flag.position[1] = self.position[1]
-            self.captured_flag.position[2] = nose_z
-  
+            # Calculate position in front of drone
+            self.captured_flag.position[0] = self.position[0] + math.sin(angle_rad) * offset
+            self.captured_flag.position[1] = self.position[1]  # Same height as drone
+            self.captured_flag.position[2] = self.position[2] + math.cos(angle_rad) * offset
+            
+            # Check for collision with other drone
+            other_drone = self.environment.drone2 if self == self.environment.drone1 else self.environment.drone1
+            dx = self.captured_flag.position[0] - other_drone.position[0]
+            dy = self.captured_flag.position[1] - other_drone.position[1]
+            dz = self.captured_flag.position[2] - other_drone.position[2]
+            
+            # If flag collides with other drone, reset it
+            collision_radius = 2.0
+            if (dx * dx + dy * dy + dz * dz) <= collision_radius * collision_radius:
+                self.captured_flag.reset_position()
+                self.captured_flag = None
+   
     def move_forward(self):
         # Calculate new position
         angle_rad = math.radians(self.rotation[1])
@@ -80,19 +137,22 @@ class Drone(GameObject):
             if (-half_width < new_x < half_width and 
                 -half_depth < new_z < half_depth and
                 not self.check_rectangle_collision(new_x, new_z)):
-                self.position[0] = new_x
-                self.position[2] = new_z
-                            
-            # Check for flag collision
-            if not self.captured_flag:
-                for flag in [self.environment.flag1, self.environment.flag2]:
-                    if self.check_flag_collision(flag):
-                        self.captured_flag = flag
-                        break
-                            
-            # Update captured flag position
-            self.update_captured_flag_position()
-  
+                # Check for divider wall and drone collisions first
+                if not self.check_divider_wall_collision(new_x) and \
+                   not self.check_drone_collision(new_x, self.position[1], new_z):
+                    self.position[0] = new_x
+                    self.position[2] = new_z
+                    
+                    # Check for flag collision
+                    if not self.captured_flag:
+                        for flag in [self.environment.flag1, self.environment.flag2]:
+                            if self.check_flag_collision(flag):
+                                self.captured_flag = flag
+                                break
+                                
+                    # Update captured flag position
+                    self.update_captured_flag_position()
+        
     def move_backward(self):
         # Calculate new position
         angle_rad = math.radians(self.rotation[1])
@@ -108,18 +168,21 @@ class Drone(GameObject):
             if (-half_width < new_x < half_width and 
                 -half_depth < new_z < half_depth and
                 not self.check_rectangle_collision(new_x, new_z)):
-                self.position[0] = new_x
-                self.position[2] = new_z
-            
-            # Check for flag collision
-            if not self.captured_flag:
-                for flag in [self.environment.flag1, self.environment.flag2]:
-                    if self.check_flag_collision(flag):
-                        self.captured_flag = flag
-                        break
-                            
-            # Update captured flag position
-            self.update_captured_flag_position()
+                # Check for divider wall and drone collisions first
+                if not self.check_divider_wall_collision(new_x) and \
+                   not self.check_drone_collision(new_x, self.position[1], new_z):
+                    self.position[0] = new_x
+                    self.position[2] = new_z
+                    
+                    # Check for flag collision
+                    if not self.captured_flag:
+                        for flag in [self.environment.flag1, self.environment.flag2]:
+                            if self.check_flag_collision(flag):
+                                self.captured_flag = flag
+                                break
+                                
+                    # Update captured flag position
+                    self.update_captured_flag_position()
 
     def move_upward(self):
         # calculate new position
@@ -146,7 +209,7 @@ class Drone(GameObject):
                 not self.check_rectangle_collision(self.position[0], new_y)):
                 self.position[1] = new_y
                 self.update_captured_flag_position()
-  
+ 
     def rotate_left(self):
         # Rotate counterclockwise around Y axis
         self.rotation[1] += self.rotation_speed
